@@ -9,50 +9,6 @@ Hệ thống được thiết kế theo tiêu chuẩn công nghiệp: tích hợ
 ## 🏗️ 1. Sơ đồ kiến trúc toàn diện (System Architecture)
 
 Hệ thống hỗ trợ song song hai mô hình vận hành: kết nối trực tiếp lên **Cloud Server riêng** hoặc chạy độc lập tại mạng nội bộ qua **Docker Compose**:
-
-*/
-graph TD
-    %% Thiết bị phần cứng
-    subgraph Hardware ["Thiết bị vật lý (ESP32-S3)"]
-        ESP32["ESP32-S3-N16R8"]
-        SCD30["Cảm biến SCD30"]
-        Relay["Module Relay"]
-        Fan["Quạt thông gió"]
-        LED_Onboard["WS2812 RGB Onboard<br>(GPIO48)"]
-        LED_Ext["LED Rời Ngoài<br>(GPIO10 & GPIO11)"]
-        
-        ESP32 -->|I2C: GPIO8/SDA, GPIO9/SCL| SCD30
-        ESP32 -->|GPIO4 (Active LOW)| Relay
-        Relay -->|Đóng/Ngắt nguồn| Fan
-        ESP32 -->|Native Write| LED_Onboard
-        ESP32 -->|Digital Out| LED_Ext
-    end
-
-    %% Mô hình Đám mây
-    subgraph CloudEnv ["Môi trường Đám mây (Mặc định)"]
-        CloudBroker["Cloud MQTT Broker<br>smart-hvac.io.vn:1883"]
-        CloudDashboard["Cloud Dashboard<br>http://smart-hvac.io.vn"]
-        
-        ESP32 <-->|WiFi / MQTT| CloudBroker
-        CloudDashboard <-->|WebSockets / HTTP| CloudBroker
-    end
-
-    %% Mô hình Cục bộ
-    subgraph LocalDocker ["Môi trường Cục bộ (Docker Compose)"]
-        Mosquitto["Local MQTT Broker<br>Port: 1883"]
-        Subscriber["Python MQTT Subscriber<br>Port: 5000"]
-        Timescale["TimescaleDB (PostgreSQL)"]
-        ReactUI["Local Dashboard (React)<br>Port: 3000"]
-        
-        ESP32 <.->|WiFi / MQTT (Tùy chọn)| Mosquitto
-        Mosquitto <-->|Đồng bộ| Subscriber
-        Subscriber -->|Lưu trữ dữ liệu| Timescale
-        ReactUI <-->|API HTTP /api| Subscriber
-    end
-*/
-
----
-
 ## 📌 2. Sơ đồ kết nối phần cứng (Wiring Diagram)
 
 > [!IMPORTANT]
