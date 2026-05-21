@@ -10,7 +10,7 @@ Hệ thống được thiết kế theo tiêu chuẩn công nghiệp: tích hợ
 
 Hệ thống hỗ trợ song song hai mô hình vận hành: kết nối trực tiếp lên **Cloud Server riêng** hoặc chạy độc lập tại mạng nội bộ qua **Docker Compose**:
 
-```mermaid
+*/
 graph TD
     %% Thiết bị phần cứng
     subgraph Hardware ["Thiết bị vật lý (ESP32-S3)"]
@@ -49,7 +49,7 @@ graph TD
         Subscriber -->|Lưu trữ dữ liệu| Timescale
         ReactUI <-->|API HTTP /api| Subscriber
     end
-```
+*/
 
 ---
 
