@@ -30,9 +30,9 @@ Hệ thống hỗ trợ song song hai mô hình vận hành: kết nối trực 
 | **IN1** | **GPIO4** | Tín hiệu điều khiển Quạt (Mặc định: Active-LOW) |
 
 ### 🌀 C. Đấu nối nguồn Quạt thông gió với Relay
-* **Cực Dương (+)** của nguồn quạt $\rightarrow$ Nối trực tiếp vào **Dây dương** của Quạt.
-* **Cực Âm (-)** của nguồn quạt $\rightarrow$ Nối vào chân **NO (Normally Open - Thường mở)** của Module Relay.
-* Chân **COM** của Module Relay $\rightarrow$ Nối vào **Dây âm** của Quạt.
+* **Cực Dương (-)** của nguồn quạt $\rightarrow$ Nối trực tiếp vào **Dây âm** của Quạt.
+* **Cực Âm (+)** của nguồn quạt $\rightarrow$ Nối vào chân **com** của Module Relay.
+* Chân **No** của Module Relay $\rightarrow$ Nối vào **Dây +** của Quạt.
 
 ---
 
