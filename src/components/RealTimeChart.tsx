@@ -27,7 +27,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                 {entry.name}
               </span>
               <span className="text-xs font-mono font-bold" style={{ color: entry.color }}>
-                {typeof entry.value === 'number' ? `${entry.value.toFixed(0)} W` : '--'}
+                {typeof entry.value === 'number' ? `${entry.value.toFixed(4)} kWh` : '--'}
               </span>
             </div>
           ))}
@@ -43,8 +43,8 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
     <div className="w-full h-full min-h-[300px] bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">SO SÁNH CÔNG SUẤT TIÊU THỤ THỜI GIAN THỰC</h3>
-          <p className="text-[10px] text-slate-500 font-medium">Đối chiếu công suất tức thời: Hệ thống AI vs Baseline truyền thống</p>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">SO SÁNH ĐIỆN NĂNG TIÊU THỤ TÍCH LŨY</h3>
+          <p className="text-[10px] text-slate-500 font-medium">Đối chiếu năng lượng tiêu hao: Hệ thống AI vs Baseline truyền thống (kWh)</p>
         </div>
       </div>
 
@@ -52,11 +52,11 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <defs>
-              <linearGradient id="colorPower" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+              <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
               </linearGradient>
-              <linearGradient id="colorPowerBase" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="colorEnergyBase" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
                 <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
               </linearGradient>
@@ -71,7 +71,7 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
               fontSize={10} 
               tickLine={false} 
               axisLine={false} 
-              tickFormatter={(val) => `${val} W`}
+              tickFormatter={(val) => `${val.toFixed(3)} kWh`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend 
@@ -82,22 +82,22 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
             />
             <Area
               type="monotone"
-              dataKey="power"
-              name="Công suất AI tối ưu"
-              stroke="#3b82f6"
+              dataKey="energy"
+              name="Điện năng AI tối ưu"
+              stroke="#10b981"
               strokeWidth={2}
               fillOpacity={1}
-              fill="url(#colorPower)"
+              fill="url(#colorEnergy)"
               isAnimationActive={false}
             />
             <Area
               type="monotone"
-              dataKey="power_base"
-              name="Công suất Baseline"
+              dataKey="energy_base"
+              name="Điện năng Baseline"
               stroke="#ef4444"
               strokeWidth={2}
               fillOpacity={1}
-              fill="url(#colorPowerBase)"
+              fill="url(#colorEnergyBase)"
               isAnimationActive={false}
             />
           </AreaChart>
