@@ -24,11 +24,11 @@
 // =========================================================================
 
 // 1. Cấu hình kết nối WiFi
-#define WIFI_SSID        "Happy House-2.4GH"      // Tên mạng WiFi của bạn
+#define WIFI_SSID        "Happy House-5GH"      // Tên mạng WiFi của bạn
 #define WIFI_PASSWORD    "12345689"  // Mật khẩu WiFi của bạn
 
 // 2. Cấu hình kết nối MQTT Broker (Kết nối tới Dashboard smart-hvac đám mây)
-#define MQTT_SERVER      "192.168.1.10"    // Tên miền máy chủ Cloud MQTT của bạn
+#define MQTT_SERVER      "192.168.1.17"    // Địa chỉ IP của Raspberry Pi Server
 #define MQTT_PORT        1883                  // Cổng MQTT mặc định
 #define MQTT_DEVICE_ID   "indoor-01"           // ID thiết bị đám mây của bạn
 #define MQTT_PUB_TOPIC   "sensor/indoor"       // Topic gửi dữ liệu cảm biến đám mây
