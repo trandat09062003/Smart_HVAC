@@ -16,8 +16,8 @@
 
 #include <Wire.h>
 #include <WiFi.h>
-#include "src/SparkFun_SCD30/SparkFun_SCD30_Arduino_Library.h" // Thư viện SCD30 cục bộ
-#include "src/PubSubClient/PubSubClient.h"                   // Thư viện MQTT cục bộ
+#include "libraries/SparkFun_SCD30/SparkFun_SCD30_Arduino_Library.h" // Thư viện SCD30 cục bộ
+#include "libraries/PubSubClient/PubSubClient.h"                   // Thư viện MQTT cục bộ
 
 // =========================================================================
 // ⚙️ CẤU HÌNH HỆ THỐNG (Vui lòng thay đổi theo mạng của bạn)
