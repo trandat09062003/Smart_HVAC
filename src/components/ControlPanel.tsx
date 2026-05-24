@@ -1,5 +1,5 @@
 import React from 'react';
-import { Power, Wind, Sun, Snowflake, Plus, Minus, Fan, Thermometer, LoaderCircle } from 'lucide-react';
+import { Power, Wind, Sun, Snowflake, Fan, Thermometer, LoaderCircle, Droplets } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { HVACState } from '../types';
 import { cn } from '../lib/utils';
@@ -19,9 +19,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, pendingFields
   
   const setMode = (mode: HVACState['mode']) => updateControl(prev => ({ ...prev, mode }));
   
-  const adjustTemp = (delta: number) => 
-    updateControl(prev => ({ ...prev, targetTemp: Math.round((Math.min(40, Math.max(0, prev.targetTemp + delta))) * 2) / 2 }));
-
   const setFanSpeed = (fanSpeed: HVACState['fanSpeed']) => updateControl(prev => ({ ...prev, fanSpeed }));
 
   const modeColors: Record<string, string> = {
@@ -75,12 +72,12 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, pendingFields
             "w-full aspect-square max-w-[200px] rounded-full border-8 border-slate-50 bg-white flex flex-col items-center justify-center transition-all duration-500",
             pendingFields.targetTemp && "opacity-60",
             state.power && modeGlows[state.mode],
-            !isAutoMode && "opacity-40"
+            isAutoMode && "opacity-80"
           )}>
             <div className="text-slate-400 mb-1 flex items-center gap-1">
               <Thermometer className="w-3 h-3" />
               <span className="text-[10px] font-bold uppercase tracking-tighter">
-                {isAutoMode ? 'Target' : 'Manual Override'}
+                {isAutoMode ? 'Target (AI)' : 'Manual Override'}
               </span>
             </div>
             
@@ -103,26 +100,46 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, pendingFields
             
             <span className="text-xl font-bold text-slate-400 mt-1">°C</span>
           </div>
+        </div>
 
-          {/* Floating Buttons */}
-          <div className={cn(
-            "absolute inset-0 flex items-center justify-between pointer-events-none px-2 transition-opacity",
-            !isAutoMode && "opacity-10 pointer-events-none"
-          )}>
-            <button 
-              onClick={() => adjustTemp(-0.5)}
-              disabled={!isAutoMode}
-              className="p-4 bg-white rounded-full shadow-lg border border-slate-100 text-slate-600 hover:text-blue-500 transition-all active:scale-90 pointer-events-auto disabled:opacity-50"
-            >
-              <Minus className="w-6 h-6" />
-            </button>
-            <button 
-              onClick={() => adjustTemp(0.5)}
-              disabled={!isAutoMode}
-              className="p-4 bg-white rounded-full shadow-lg border border-slate-100 text-slate-600 hover:text-red-500 transition-all active:scale-90 pointer-events-auto disabled:opacity-50"
-            >
-              <Plus className="w-6 h-6" />
-            </button>
+        {/* Safety Thresholds Displays */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* CO2 Threshold Card */}
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-col items-center justify-between text-center min-h-[110px]">
+            <div className="text-emerald-500 flex items-center gap-1">
+              <Wind className="w-3.5 h-3.5" />
+              <span className="text-[9px] font-extrabold uppercase tracking-wider">Ngưỡng CO2</span>
+            </div>
+            
+            <div className="flex flex-col items-center justify-center my-1.5">
+              <p className="text-lg font-extrabold font-mono text-slate-800 leading-none tabular-nums">
+                {state.co2Max ?? 800} <span className="text-xs text-slate-400 font-bold">ppm</span>
+              </p>
+              <span className="text-[8px] text-emerald-600 font-bold mt-1 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100 flex items-center gap-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                AI Tự động
+              </span>
+            </div>
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-tighter leading-none">Bật quạt nếu vượt quá</span>
+          </div>
+
+          {/* Humidity Threshold Card */}
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-col items-center justify-between text-center min-h-[110px]">
+            <div className="text-blue-500 flex items-center gap-1">
+              <Droplets className="w-3.5 h-3.5" />
+              <span className="text-[9px] font-extrabold uppercase tracking-wider">Ngưỡng Độ Ẩm</span>
+            </div>
+            
+            <div className="flex flex-col items-center justify-center my-1.5">
+              <p className="text-lg font-extrabold font-mono text-slate-800 leading-none tabular-nums">
+                {state.humidityMax ?? 60}.0<span className="text-xs text-slate-400 font-bold">%</span>
+              </p>
+              <span className="text-[8px] text-blue-600 font-bold mt-1 bg-blue-50 px-1.5 py-0.5 rounded-full border border-blue-100 flex items-center gap-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                AI Tự động
+              </span>
+            </div>
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-tighter leading-none">Bật quạt nếu vượt quá</span>
           </div>
         </div>
 

@@ -27,7 +27,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                 {entry.name}
               </span>
               <span className="text-xs font-mono font-bold" style={{ color: entry.color }}>
-                {typeof entry.value === 'number' ? entry.value.toFixed(1) : '--'}
+                {typeof entry.value === 'number' ? `${entry.value.toFixed(0)} W` : '--'}
               </span>
             </div>
           ))}
@@ -43,22 +43,22 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
     <div className="w-full h-full min-h-[300px] bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Environment Trends</h3>
-          <p className="text-[10px] text-slate-500 font-medium">Real-time telemetry (last 20 cycles)</p>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">SO SÁNH CÔNG SUẤT TIÊU THỤ THỜI GIAN THỰC</h3>
+          <p className="text-[10px] text-slate-500 font-medium">Đối chiếu công suất tức thời: Hệ thống AI vs Baseline truyền thống</p>
         </div>
       </div>
 
       <div className="h-[250px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <defs>
-              <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+              <linearGradient id="colorPower" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
               </linearGradient>
-              <linearGradient id="colorOutdoorTemp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+              <linearGradient id="colorPowerBase" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
+                <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" opacity={1} />
@@ -71,7 +71,7 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
               fontSize={10} 
               tickLine={false} 
               axisLine={false} 
-              tickFormatter={(val) => `${val}`}
+              tickFormatter={(val) => `${val} W`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend 
@@ -82,22 +82,22 @@ export const RealTimeChart: React.FC<RealTimeChartProps> = ({ data }) => {
             />
             <Area
               type="monotone"
-              dataKey="temp"
-              name="Indoor Temperature"
+              dataKey="power"
+              name="Công suất AI tối ưu"
               stroke="#3b82f6"
               strokeWidth={2}
               fillOpacity={1}
-              fill="url(#colorTemp)"
+              fill="url(#colorPower)"
               isAnimationActive={false}
             />
             <Area
               type="monotone"
-              dataKey="outdoorTemp"
-              name="Outdoor Temperature"
-              stroke="#10b981"
+              dataKey="power_base"
+              name="Công suất Baseline"
+              stroke="#ef4444"
               strokeWidth={2}
               fillOpacity={1}
-              fill="url(#colorOutdoorTemp)"
+              fill="url(#colorPowerBase)"
               isAnimationActive={false}
             />
           </AreaChart>

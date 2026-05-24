@@ -24,11 +24,11 @@
 // =========================================================================
 
 // 1. Cấu hình kết nối WiFi
-#define WIFI_SSID        "Happy House-5GH"      // Tên mạng WiFi của bạn
+#define WIFI_SSID        "Happy House-2.4GH"      // Tên mạng WiFi của bạn
 #define WIFI_PASSWORD    "12345689"  // Mật khẩu WiFi của bạn
 
 // 2. Cấu hình kết nối MQTT Broker (Kết nối tới Dashboard smart-hvac đám mây)
-#define MQTT_SERVER      "192.168.1.17"    // Địa chỉ IP của Raspberry Pi Server
+#define MQTT_SERVER      "192.168.1.10"    // Địa chỉ IP của Raspberry Pi Server
 #define MQTT_PORT        1883                  // Cổng MQTT mặc định
 #define MQTT_DEVICE_ID   "indoor-01"           // ID thiết bị đám mây của bạn
 #define MQTT_PUB_TOPIC   "sensor/indoor"       // Topic gửi dữ liệu cảm biến đám mây
@@ -60,11 +60,11 @@ float TEMP_SETPOINT        = 25.0; // Nhiệt độ cài đặt mục tiêu (°C
 bool  systemPowerState     = true; // Trạng thái hoạt động hệ thống (true: ON, false: OFF - Chế độ chờ Standby)
 
 // Các ngưỡng cố định bảo vệ tiện nghi không khí
-const float TEMP_HYSTERESIS     = 0.5;  // Khoảng trễ nhiệt độ (°C) tránh đóng ngắt liên tục
-const float CO2_MAX           = 800.0;  // Ngưỡng CO2 chuẩn báo động (ppm) để bật quạt
-const float CO2_HYSTERESIS    = 100.0;  // Khoảng trễ CO2 (Quạt tắt khi < 700ppm)
-const float HUMIDITY_MAX      = 60.0;   // Ngưỡng Độ ẩm tối đa (%) theo chuẩn
-const float HUMIDITY_HYSTERESIS = 5.0;  // Khoảng trễ Độ ẩm (Quạt tắt khi < 55%)
+const float TEMP_HYSTERESIS   = 0.5;   // Khoảng trễ nhiệt độ (°C) tránh đóng ngắt liên tục
+float CO2_MAX                 = 800.0;  // Ngưỡng CO2 chuẩn báo động (ppm) để bật quạt (có thể thay đổi động)
+const float CO2_HYSTERESIS    = 100.0; // Khoảng trễ CO2 (Quạt tắt khi < CO2_MAX - 100)
+float HUMIDITY_MAX            = 60.0;  // Ngưỡng độ ẩm tối đa (%) theo chuẩn (có thể thay đổi động)
+const float HUMIDITY_HYSTERESIS = 5.0; // Khoảng trễ độ ẩm (Quạt tắt khi < HUMIDITY_MAX - 5)
 
 // Quản lý trạng thái hiện tại
 bool currentFanState   = false; // Trạng thái Quạt tản (false: OFF, true: ON)
@@ -268,6 +268,34 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         fanManualState = "off";
       }
       Serial.printf("  --> [MQTT Command] Fan Mode: %s | State: %s\n", fanMode.c_str(), fanManualState.c_str());
+    }
+  }
+
+  // 5. Phân tích ngưỡng CO2 an toàn mới (co2Max)
+  char* co2MaxPtr = strstr(message, "\"co2Max\"");
+  if (co2MaxPtr != NULL) {
+    char* valPtr = strchr(co2MaxPtr, ':');
+    if (valPtr != NULL) {
+      valPtr++;
+      float newCo2Max = atof(valPtr);
+      if (newCo2Max >= 400.0 && newCo2Max <= 2000.0) {
+        CO2_MAX = newCo2Max;
+        Serial.printf("  --> [MQTT Command] Cap nhat nguong CO2 an toan: %.1f ppm\n", CO2_MAX);
+      }
+    }
+  }
+
+  // 6. Phân tích ngưỡng độ ẩm an toàn mới (humidityMax)
+  char* humMaxPtr = strstr(message, "\"humidityMax\"");
+  if (humMaxPtr != NULL) {
+    char* valPtr = strchr(humMaxPtr, ':');
+    if (valPtr != NULL) {
+      valPtr++;
+      float newHumMax = atof(valPtr);
+      if (newHumMax >= 10.0 && newHumMax <= 95.0) {
+        HUMIDITY_MAX = newHumMax;
+        Serial.printf("  --> [MQTT Command] Cap nhat nguong do am an toan: %.1f %\n", HUMIDITY_MAX);
+      }
     }
   }
 }

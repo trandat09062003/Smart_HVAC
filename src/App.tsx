@@ -87,6 +87,8 @@ const remoteToHVACState = (controlState: RemoteControlState): HVACState => ({
   mode: controlState.operationMode as any,
   targetTemp: controlState.temp,
   fanSpeed: controlState.fanPower as any,
+  co2Max: controlState.co2Max ?? 800,
+  humidityMax: controlState.humidityMax ?? 60,
 });
 
 const getControlRevision = (controlState: RemoteControlState) =>
@@ -119,6 +121,8 @@ export default function App() {
     mode: 'auto',
     targetTemp: 25.0,
     fanSpeed: 'auto',
+    co2Max: 800,
+    humidityMax: 60,
   });
   const [pendingControl, setPendingControl] = useState<PendingControl | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -131,6 +135,12 @@ export default function App() {
   const controlReadyRef = useRef(false);
   const lastControlRevisionRef = useRef<string | null>(null);
   const [zoneManager, setZoneManager] = useState<ZoneManagerInfo | null>(null);
+  const [latestPower, setLatestPower] = useState<number>(0);
+  const [latestEnergy, setLatestEnergy] = useState<number>(0);
+  const [latestPowerAc, setLatestPowerAc] = useState<number>(0);
+  const [latestPowerFan, setLatestPowerFan] = useState<number>(0);
+  const [latestPowerBase, setLatestPowerBase] = useState<number>(0);
+  const [latestEnergyBase, setLatestEnergyBase] = useState<number>(0);
 
   useEffect(() => {
     hvacStateRef.current = hvacState;
@@ -161,6 +171,8 @@ export default function App() {
       temp: nextState.targetTemp,
       operationMode: nextState.mode,
       fanPower: nextState.fanSpeed,
+      co2Max: nextState.co2Max,
+      humidityMax: nextState.humidityMax,
       clientId,
       requestedAt,
     };
@@ -253,6 +265,14 @@ export default function App() {
 
         const telemetry: TelemetryResponse = await response.json();
         setHistory(telemetry.history);
+        if (telemetry.latest) {
+          setLatestPower(telemetry.latest.power ?? 0);
+          setLatestEnergy(telemetry.latest.energy ?? 0);
+          setLatestPowerAc(telemetry.latest.power_ac ?? 0);
+          setLatestPowerFan(telemetry.latest.power_fan ?? 0);
+          setLatestPowerBase(telemetry.latest.power_base ?? 0);
+          setLatestEnergyBase(telemetry.latest.energy_base ?? 0);
+        }
         if (telemetry.zoneManager) {
           setZoneManager(telemetry.zoneManager);
         }
@@ -424,31 +444,55 @@ export default function App() {
 
             {/* Secondary Intel */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+               <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm flex flex-col justify-between min-h-[250px]">
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Zone Coordinator</h4>
-                      {zoneManager ? (
-                        zoneManager.overrideActive ? (
-                          <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            CHỈNH TAY (OVERRIDE)
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            AI ĐANG TỐI ƯU
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-[9px] text-slate-400">Offline</span>
-                      )}
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">HIỆU QUẢ TỐI ƯU CỦA AI</h4>
+                      <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        AI COORD ACTIVE
+                      </span>
                     </div>
 
                     <div className="space-y-3">
-                      <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                        <span className="text-xs text-slate-600 font-medium">Chính sách hiện tại</span>
-                        <span className="text-[10px] font-bold uppercase text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                      {/* Big Savings Metric */}
+                      <div className="flex items-center gap-4 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100">
+                        <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-600 font-extrabold text-sm animate-pulse">
+                          🍃
+                        </div>
+                        <div>
+                          <p className="text-[8px] text-emerald-600 font-extrabold uppercase tracking-tight">AI GIÚP TIẾT KIỆM ĐIỆN NĂNG</p>
+                          <p className="text-xl font-black font-mono text-emerald-700 leading-none mt-1">
+                            {latestEnergyBase > latestEnergy 
+                              ? (((latestEnergyBase - latestEnergy) / latestEnergyBase) * 100).toFixed(1)
+                              : '0.0'}%
+                          </p>
+                          <p className="text-[8px] text-slate-500 font-bold mt-1">
+                            Lượng điện giảm: {Math.max(0, latestEnergyBase - latestEnergy).toFixed(3)} kWh
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Savings Breakdown */}
+                      <div className="grid grid-cols-2 gap-3 text-xs font-semibold pt-1">
+                        <div className="border-r border-slate-100 pr-2">
+                          <p className="text-[8px] text-slate-400 font-extrabold uppercase">CHI PHÍ ĐÃ GIẢM</p>
+                          <p className="text-sm font-black text-emerald-600 mt-0.5">
+                            - {Math.max(0, (latestEnergyBase - latestEnergy) * 2500).toLocaleString('vi-VN', { maximumFractionDigits: 0 })} VNĐ
+                          </p>
+                        </div>
+                        <div className="pl-2">
+                          <p className="text-[8px] text-slate-400 font-extrabold uppercase">GIẢM PHÁT THẢI CO2</p>
+                          <p className="text-sm font-black text-slate-700 mt-0.5">
+                            - {Math.max(0, (latestEnergyBase - latestEnergy) * 0.5).toFixed(3)} kg
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Current active policy */}
+                      <div className="flex justify-between items-center border-t border-slate-100 pt-2 text-xs">
+                        <span className="text-slate-500 font-medium">Chế độ vận hành của AI</span>
+                        <span className="text-[9px] font-bold uppercase text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
                           {zoneManager?.currentPolicy === 'working_hours' && '💼 Giờ làm việc'}
                           {zoneManager?.currentPolicy === 'night_eco' && '🌙 Ngủ đêm ECO'}
                           {zoneManager?.currentPolicy === 'eco_standby' && '🍃 Chờ tiết kiệm'}
@@ -456,36 +500,124 @@ export default function App() {
                         </span>
                       </div>
 
-                      {zoneManager?.overrideActive && (
-                        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                          <span className="text-xs text-slate-600 font-medium">Thời gian Override còn</span>
-                          <span className="text-[10px] font-mono font-bold text-amber-600">
-                            {Math.floor(zoneManager.remainingOverride / 60)}m {zoneManager.remainingOverride % 60}s
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Khuyến nghị từ AI</span>
-                        <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                          {zoneManager?.aiRecommendation || 'Đang phân tích dữ liệu phòng...'}
-                        </p>
+                      {/* AI recommendation */}
+                      <div className="p-2.5 rounded bg-slate-50 border border-slate-100 text-[10px] text-slate-500 leading-relaxed font-medium">
+                        <span className="font-extrabold text-slate-400 block mb-0.5 uppercase text-[8px] tracking-tight">AI RECOMMENDATION:</span>
+                        {zoneManager?.aiRecommendation || 'Đang phân tích hoạt động phòng...'}
                       </div>
                     </div>
                   </div>
                </div>
-               <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Energy Consumption</h4>
-                  <div className="flex items-center justify-between">
-                     <div className="space-y-1">
-                        <p className="text-3xl font-bold font-mono text-slate-900">4.2<span className="text-sm text-slate-400 ml-1">kWh</span></p>
-                        <p className="text-[10px] text-slate-500 uppercase font-medium">Current Load</p>
-                     </div>
-                     <div className="w-24 h-12 flex items-end gap-0.5">
-                        {[4, 7, 5, 8, 3, 9, 6].map((h, i) => (
-                          <div key={i} className="flex-1 bg-blue-500/10 rounded-t-sm" style={{ height: `${h * 10}%` }} />
-                        ))}
-                     </div>
+               <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between min-h-[280px]">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                      <span>ĐIỆN NĂNG TIÊU THỤ (AI SIMULATOR)</span>
+                      <span className="flex items-center gap-1 text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">
+                        <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
+                        Đang giám sát
+                      </span>
+                    </h4>
+                    
+                    {/* Real-time Load & Consumption */}
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div>
+                        <p className="text-[8px] text-slate-400 uppercase font-extrabold tracking-tight">TỔNG TIÊU THỤ (AI)</p>
+                        <p className="text-2xl font-black font-mono text-slate-900 tracking-tight leading-none mt-1">
+                          {latestEnergy.toFixed(3)}
+                          <span className="text-xs text-slate-400 ml-1 font-bold">kWh</span>
+                        </p>
+                        <p className="text-[8px] text-slate-500 font-semibold tracking-tighter leading-none mt-1">
+                          Tạm tính: {(latestEnergy * 2500).toLocaleString('vi-VN', { maximumFractionDigits: 0 })} VNĐ
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] text-slate-400 uppercase font-extrabold tracking-tight">CÔNG SUẤT TỨC THÌ</p>
+                        <p className="text-2xl font-black font-mono text-blue-600 tracking-tight leading-none mt-1">
+                          {latestPower >= 1000 ? (latestPower / 1000).toFixed(2) : latestPower.toFixed(0)}
+                          <span className="text-xs text-slate-400 ml-1 font-bold">{latestPower >= 1000 ? 'kW' : 'W'}</span>
+                        </p>
+                        <span className={`inline-flex items-center gap-0.5 text-[8px] font-extrabold px-1.5 py-0.5 rounded mt-1.5 ${
+                          latestPower < 50 
+                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                            : latestPower < 500
+                            ? 'bg-sky-50 text-sky-600 border border-sky-100'
+                            : 'bg-orange-50 text-orange-600 border border-orange-100'
+                        }`}>
+                          {latestPower < 50 ? 'Chờ/Tiết kiệm' : latestPower < 500 ? 'Tải Trung bình' : 'Tải Cao'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Breakdown section */}
+                    <div className="space-y-1.5">
+                      <span className="text-[8px] text-slate-400 font-extrabold uppercase block">Phân rã công suất (AI Breakdown)</span>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-slate-50/50 border border-slate-100 rounded p-2 text-center">
+                          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">ĐIỀU HÒA (AC)</p>
+                          <p className="text-xs font-black font-mono text-slate-700 mt-0.5">{latestPowerAc.toFixed(0)} W</p>
+                        </div>
+                        <div className="bg-slate-50/50 border border-slate-100 rounded p-2 text-center">
+                          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">QUẠT GIÓ (FAN)</p>
+                          <p className="text-xs font-black font-mono text-slate-700 mt-0.5">{latestPowerFan.toFixed(0)} W</p>
+                        </div>
+                        <div className="bg-slate-50/50 border border-slate-100 rounded p-2 text-center">
+                          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">HỆ THỐNG (STBY)</p>
+                          <p className="text-xs font-black font-mono text-slate-700 mt-0.5">5 W</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Baseline Comparison section */}
+                    <div className="border-t border-slate-100 pt-3 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[8px] text-slate-400 font-extrabold uppercase">So sánh hiệu quả với Baseline</span>
+                        {latestEnergyBase > 0 && latestEnergyBase > latestEnergy ? (
+                          <span className="inline-flex items-center gap-0.5 text-[8.5px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 animate-pulse">
+                            🍃 AI tiết kiệm: {(((latestEnergyBase - latestEnergy) / latestEnergyBase) * 100).toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-[8px] text-slate-400 font-bold italic">Đang phân tích...</span>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                        <div className="border-r border-slate-100 pr-2">
+                          <p className="text-[8px] text-emerald-600 font-extrabold uppercase">HỆ THỐNG AI TỐI ƯU</p>
+                          <p className="text-sm font-black font-mono text-slate-800 mt-0.5">{latestEnergy.toFixed(3)} kWh</p>
+                          <p className="text-[7.5px] text-slate-400 font-bold">~{(latestEnergy * 2500).toLocaleString('vi-VN', { maximumFractionDigits: 0 })} VNĐ</p>
+                        </div>
+                        <div className="pl-2">
+                          <p className="text-[8px] text-slate-400 font-extrabold uppercase">BASELINE (CHƯA TỐI ƯU)</p>
+                          <p className="text-sm font-black font-mono text-slate-400 mt-0.5">{latestEnergyBase.toFixed(3)} kWh</p>
+                          <p className="text-[7.5px] text-slate-400 font-bold">~{(latestEnergyBase * 2500).toLocaleString('vi-VN', { maximumFractionDigits: 0 })} VNĐ</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Sparkline chart at the very bottom */}
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-3">
+                    <span className="text-[8px] text-slate-400 font-extrabold uppercase">Biểu đồ tải (7 điểm gần nhất)</span>
+                    <div className="w-32 h-8 flex items-end gap-0.5">
+                      {(() => {
+                        const lastPowerPoints = history.slice(-7);
+                        const maxPower = Math.max(...lastPowerPoints.map(p => p.power ?? 0), 100);
+                        return lastPowerPoints.map((pt, i) => {
+                          const power = pt.power ?? 0;
+                          const heightPercent = maxPower > 0 ? (power / maxPower) * 100 : 10;
+                          return (
+                            <div 
+                              key={i} 
+                              className={`flex-1 rounded-t-sm transition-all duration-500 ${
+                                power < 50 ? 'bg-emerald-400/60' : power < 500 ? 'bg-sky-400/80' : 'bg-blue-500'
+                              }`}
+                              style={{ height: `${Math.max(10, heightPercent)}%` }}
+                              title={`AI: ${power.toFixed(0)}W | Baseline: ${(pt.power_base ?? 0).toFixed(0)}W`}
+                            />
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
                </div>
             </div>

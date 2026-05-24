@@ -16,6 +16,12 @@ export interface ChartDataPoint {
   outdoorTemp: number | null;
   co2: number | null;
   pm25: number | null;
+  power: number | null;
+  energy: number | null;
+  power_base: number | null;
+  energy_base: number | null;
+  power_ac: number | null;
+  power_fan: number | null;
 }
 
 export interface ZoneManagerInfo {
@@ -34,6 +40,12 @@ export interface TelemetryResponse {
     co2: number | null;
     dust: number | null;
     time: string | null;
+    power: number | null;
+    energy: number | null;
+    power_base: number | null;
+    energy_base: number | null;
+    power_ac: number | null;
+    power_fan: number | null;
   };
   history: ChartDataPoint[];
   controlState: RemoteControlState | null;
@@ -45,6 +57,8 @@ export interface HVACState {
   mode: 'auto' | 'cool' | 'heat' | 'off';
   targetTemp: number;
   fanSpeed: 'auto' | 'on' | 'off';
+  co2Max: number;
+  humidityMax: number;
 }
 
 export interface RemoteControlPayload {
@@ -53,6 +67,8 @@ export interface RemoteControlPayload {
   temp: number;
   operationMode: HVACState['mode'];
   fanPower: HVACState['fanSpeed'];
+  co2Max: number;
+  humidityMax: number;
   clientId: string;
   requestedAt: string;
 }
