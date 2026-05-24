@@ -18,6 +18,14 @@ export interface ChartDataPoint {
   pm25: number | null;
 }
 
+export interface ZoneManagerInfo {
+  currentPolicy: 'working_hours' | 'night_eco' | 'eco_standby' | 'manual';
+  overrideActive: boolean;
+  remainingOverride: number;
+  scheduledPolicy: 'working_hours' | 'night_eco' | 'eco_standby';
+  aiRecommendation: string;
+}
+
 export interface TelemetryResponse {
   latest: {
     temperature: number | null;
@@ -29,6 +37,7 @@ export interface TelemetryResponse {
   };
   history: ChartDataPoint[];
   controlState: RemoteControlState | null;
+  zoneManager: ZoneManagerInfo;
 }
 
 export interface HVACState {

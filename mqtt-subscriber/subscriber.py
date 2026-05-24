@@ -92,6 +92,110 @@ def get_outdoor_temperature(payload):
             return value
     return None
 
+# ====================== AI ZONE MANAGER ======================
+class ZoneManager:
+    def __init__(self):
+        self.client = None
+        self.current_policy = "working_hours"  # "working_hours", "night_eco", "eco_standby", "manual"
+        self.override_until = 0  # Timestamp khi manual override kích hoạt
+        self.last_applied_state = {}
+        self.last_recommendation = "Hệ thống hoạt động tối ưu."
+
+    def get_scheduled_policy(self):
+        import datetime
+        now = datetime.datetime.now()
+        hour = now.hour
+        
+        # 8h sáng - 17h chiều: Giờ làm việc (Working Hours)
+        if 8 <= hour < 17:
+            return "working_hours"
+        # 10h đêm - 6h sáng: Tiết kiệm ban đêm (Night Eco)
+        elif hour >= 22 or hour < 6:
+            return "night_eco"
+        # Các giờ khác: Chế độ chờ tiết kiệm (Eco Standby)
+        else:
+            return "eco_standby"
+
+    def set_client(self, client):
+        self.client = client
+
+    def evaluate_and_control(self, device_id, temperature, co2, humidity, outdoor_temp):
+        """
+        Thuật toán điều khiển phối hợp dựa trên XGB-DQN (Free cooling) và Chính sách Zone.
+        """
+        import time
+        
+        if time.time() < self.override_until:
+            self.current_policy = "manual"
+            self.last_recommendation = f"Chế độ chỉnh tay đang hoạt động. Còn {int(self.override_until - time.time())} giây."
+            return
+
+        policy = self.get_scheduled_policy()
+        self.current_policy = policy
+        
+        power = True
+        target_temp = 25.0
+        op_mode = "auto"
+        fan_power = "auto"
+        reason = "Đang áp dụng chính sách thời gian mặc định."
+
+        # Logic XGB-DQN (Free Cooling):
+        if outdoor_temp is not None and outdoor_temp < temperature - 1.5 and policy != "eco_standby":
+            target_temp = 28.0  
+            op_mode = "fan"     
+            fan_power = "high"  
+            reason = f"AI phát hiện trời mát ({outdoor_temp:.1f}°C) hơn trong phòng ({temperature:.1f}°C). Khuyến nghị MỞ CỬA SỔ và chạy quạt thông gió!"
+        else:
+            if policy == "working_hours":
+                target_temp = 24.5  
+                op_mode = "auto"
+                fan_power = "auto"
+                reason = "Chính sách Giờ làm việc (08:00 - 17:00). Duy trì độ mát tối ưu."
+            elif policy == "night_eco":
+                target_temp = 26.5  
+                op_mode = "auto"
+                fan_power = "low"   
+                reason = "Chính sách Ngủ đêm ECO. Tăng nhẹ nhiệt độ và giảm ồn quạt."
+            elif policy == "eco_standby":
+                power = False
+                target_temp = 28.0
+                op_mode = "off"
+                fan_power = "off"
+                reason = "Ngoài giờ làm việc. Đưa Zone về chế độ chờ Standby tiết kiệm điện."
+
+        self.last_recommendation = reason
+
+        new_state = {
+            "power": power,
+            "temp": target_temp,
+            "operationMode": op_mode,
+            "fanPower": fan_power
+        }
+
+        if self.last_applied_state.get(device_id) != new_state:
+            self.last_applied_state[device_id] = new_state
+            
+            command = {
+                "device_id": device_id,
+                "power": power,
+                "temp": target_temp,
+                "operationMode": op_mode,
+                "fanPower": fan_power,
+                "clientId": "ai-zone-manager",
+                "requestedAt": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+            
+            if self.client:
+                try:
+                    self.client.publish(CONTROL_TOPIC, json.dumps(command), qos=1)
+                    save_remote_control_state(command)
+                    print(f"🤖 AI Zone Manager [{policy}]: Đã đẩy Setpoint xuống ESP32 → Temp: {target_temp}°C | Lý do: {reason}")
+                except Exception as e:
+                    print(f"❌ Zone Manager publish error: {e}")
+
+# Khởi tạo đối tượng toàn cục
+zone_manager = ZoneManager()
+
 def fetch_telemetry():
     with get_db_connection() as api_conn:
         with api_conn.cursor() as api_cur:
@@ -202,11 +306,24 @@ def fetch_telemetry():
             'lastModifiedBy': control_row[6] or 'unknown',
         }
 
+    # Lấy thông tin AI Zone Manager
+    import time
+    override_active = time.time() < zone_manager.override_until
+    remaining_override = int(zone_manager.override_until - time.time()) if override_active else 0
+
     return {
         'latest': latest,
         'history': history[-20:],
         'controlState': control_state,
+        'zoneManager': {
+            'currentPolicy': zone_manager.current_policy,
+            'overrideActive': override_active,
+            'remainingOverride': remaining_override,
+            'scheduledPolicy': zone_manager.get_scheduled_policy(),
+            'aiRecommendation': zone_manager.last_recommendation
+        }
     }
+
 
 def save_remote_control_state(command):
     with get_db_connection() as control_conn:
@@ -292,6 +409,11 @@ class TelemetryRequestHandler(BaseHTTPRequestHandler):
             if command['fanPower'] not in ['auto', 'on', 'off', 'low', 'medium', 'high']:
                 raise ValueError('fanPower must be auto, on, off, low, medium, or high')
 
+            # Ghi đè AI Zone Manager bằng lệnh thủ công của người dùng (Manual Override 15 phút)
+            if command['clientId'] != "ai-zone-manager":
+                zone_manager.override_until = time.time() + 900  # 15 phút
+                zone_manager.current_policy = "manual"
+
             result = client.publish(CONTROL_TOPIC, json.dumps(command), qos=1)
             result.wait_for_publish(timeout=3)
 
@@ -341,21 +463,29 @@ def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode('utf-8'))
         device_id = payload.get('device_id', 'unknown')
+        temp = to_float(payload.get('temperature'))
+        co2 = to_int(payload.get('co2'))
+        humidity = to_float(payload.get('humidity'))
+        outdoor_temp = get_outdoor_temperature(payload)
 
         cur.execute("""
             INSERT INTO sensor_data (time, device_id, temperature, outdoor_temperature, humidity, co2, dust)
             VALUES (NOW(), %s, %s, %s, %s, %s, %s)
         """, (
             device_id,
-            to_float(payload.get('temperature')),
-            get_outdoor_temperature(payload),
-            to_float(payload.get('humidity')),
-            to_int(payload.get('co2')),
+            temp,
+            outdoor_temp,
+            humidity,
+            co2,
             to_float(payload.get('dust'))
         ))
         conn.commit()
         
-        print(f"✅ Saved → Device: {device_id} | Temp: {payload.get('temperature')} | CO2: {payload.get('co2')}")
+        print(f"✅ Saved → Device: {device_id} | Temp: {temp} | CO2: {co2}")
+        
+        # Gọi bộ quản lý Zone tự động đánh giá và điều khiển
+        if device_id != 'unknown':
+            zone_manager.evaluate_and_control(device_id, temp, co2, humidity, outdoor_temp)
         
     except Exception as e:
         print(f"❌ Error processing message: {e} | Topic: {msg.topic}")
@@ -364,6 +494,9 @@ def on_message(client, userdata, msg):
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)   # ← Sửa ở đây
 client.on_connect = on_connect
 client.on_message = on_message
+
+# Kết nối client vào zone_manager
+zone_manager.set_client(client)
 
 print("🚀 MQTT Subscriber đang chạy...")
 Thread(target=start_api_server, daemon=True).start()

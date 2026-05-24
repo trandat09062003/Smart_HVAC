@@ -18,7 +18,7 @@ import mainLogo from '../img/main_logo_2.png';
 import { MetricCard } from './components/MetricCard';
 import { RealTimeChart } from './components/RealTimeChart';
 import { ControlPanel } from './components/ControlPanel';
-import { SensorReading, ChartDataPoint, HVACState, Status, TelemetryResponse, RemoteControlPayload, RemoteControlResponse, RemoteControlState } from './types';
+import { SensorReading, ChartDataPoint, HVACState, Status, TelemetryResponse, RemoteControlPayload, RemoteControlResponse, RemoteControlState, ZoneManagerInfo } from './types';
 import { cn } from './lib/utils';
 
 // Helper to determine status based on thresholds
@@ -130,6 +130,7 @@ export default function App() {
   const pendingControlRef = useRef<PendingControl | null>(null);
   const controlReadyRef = useRef(false);
   const lastControlRevisionRef = useRef<string | null>(null);
+  const [zoneManager, setZoneManager] = useState<ZoneManagerInfo | null>(null);
 
   useEffect(() => {
     hvacStateRef.current = hvacState;
@@ -252,6 +253,9 @@ export default function App() {
 
         const telemetry: TelemetryResponse = await response.json();
         setHistory(telemetry.history);
+        if (telemetry.zoneManager) {
+          setZoneManager(telemetry.zoneManager);
+        }
         if (telemetry.controlState) {
           const incomingState = remoteToHVACState(telemetry.controlState);
           const incomingRevision = getControlRevision(telemetry.controlState);
@@ -420,19 +424,54 @@ export default function App() {
 
             {/* Secondary Intel */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Maintenance Schedule</h4>
-                  <div className="space-y-4">
-                    {[
-                      { item: 'HEPA Filter Replacement', status: 'Due in 4 days', color: 'text-amber-600' },
-                      { item: 'Coolant Level Inspection', status: 'Optimal', color: 'text-emerald-600' },
-                      { item: 'Sensor Calibration', status: 'Scheduled', color: 'text-blue-600' },
-                    ].map((step, i) => (
-                      <div key={i} className="flex justify-between items-center border-b border-slate-100 pb-2">
-                         <span className="text-xs text-slate-600 font-medium">{step.item}</span>
-                         <span className={cn("text-[10px] font-bold uppercase", step.color)}>{step.status}</span>
+               <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Zone Coordinator</h4>
+                      {zoneManager ? (
+                        zoneManager.overrideActive ? (
+                          <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            CHỈNH TAY (OVERRIDE)
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            AI ĐANG TỐI ƯU
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-[9px] text-slate-400">Offline</span>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                        <span className="text-xs text-slate-600 font-medium">Chính sách hiện tại</span>
+                        <span className="text-[10px] font-bold uppercase text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                          {zoneManager?.currentPolicy === 'working_hours' && '💼 Giờ làm việc'}
+                          {zoneManager?.currentPolicy === 'night_eco' && '🌙 Ngủ đêm ECO'}
+                          {zoneManager?.currentPolicy === 'eco_standby' && '🍃 Chờ tiết kiệm'}
+                          {zoneManager?.currentPolicy === 'manual' && '👤 Thủ công'}
+                        </span>
                       </div>
-                    ))}
+
+                      {zoneManager?.overrideActive && (
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                          <span className="text-xs text-slate-600 font-medium">Thời gian Override còn</span>
+                          <span className="text-[10px] font-mono font-bold text-amber-600">
+                            {Math.floor(zoneManager.remainingOverride / 60)}m {zoneManager.remainingOverride % 60}s
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Khuyến nghị từ AI</span>
+                        <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                          {zoneManager?.aiRecommendation || 'Đang phân tích dữ liệu phòng...'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                </div>
                <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm">
