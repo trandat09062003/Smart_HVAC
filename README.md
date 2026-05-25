@@ -216,20 +216,3 @@ Logs hiển thị công suất (W) và năng lượng tích lũy (kWh) được 
 
 ---
 
-## 🛠️ 8. Hướng dẫn xử lý sự cố thường gặp (Troubleshooting)
-
-### 🔴 Lỗi 1: `Bind for 0.0.0.0:1883 failed: port is already allocated` khi chạy docker
-* **Khắc phục:** Chạy lệnh `sudo systemctl stop mosquitto` trên Pi trước khi khởi chạy Docker Compose.
-
-### 🔴 Lỗi 2: Trị số điện năng của AI hiển thị lệch lớn so với Baseline ngay khi khởi chạy
-* **Nguyên nhân:** Lệch dữ liệu lịch sử tích lũy (AI đã chạy từ trước, Baseline vừa mới được tạo lập).
-* **Khắc phục:** SSH vào Pi và chạy lệnh dưới đây để đồng bộ hóa cả hai bộ đếm về `0.0` xuất phát cùng nhau:
-  `sudo docker exec -i timescaledb psql -U admin -d iotdb -c "UPDATE sensor_data SET energy_kwh = 0.0, energy_base_kwh = 0.0;"`
-
-### 🔴 Lỗi 3: ESP32 không thể kết nối tới MQTT Broker của Pi (báo mất kết nối Wi-Fi)
-* **Khắc phục:** 
-  1. Đảm bảo ESP32 đang kết nối vào Wi-Fi băng tần 2.4GHz.
-  2. Kiểm tra tường lửa trên Pi có chặn cổng 1883 không bằng lệnh: `sudo ufw allow 1883/tcp`.
-
----
-*Dự án được xây dựng và phát triển trên nền tảng khoa học tối ưu hóa công trình và môi trường. Chúc bạn có những trải nghiệm tuyệt vời với hệ thống HVAC thông minh của mình!*
