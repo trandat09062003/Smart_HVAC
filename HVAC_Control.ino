@@ -38,9 +38,14 @@
 #define I2C_SDA          8     // Chân SDA nối cảm biến SCD30
 #define I2C_SCL          9     // Chân SCL nối cảm biến SCD30
 #define PIN_RELAY_FAN    4     // Chân GPIO4 điều khiển Relay quạt tản
-#define RELAY_ACTIVE_LOW false // Sửa lỗi ngược: Đặt thành false (Kích HIGH để bật quạt, LOW để tắt)hái nhiệt độ
+#define RELAY_ACTIVE_LOW false // Sửa lỗi ngược: Đặt thành false (Kích HIGH để bật quạt, LOW để tắt)
 #define USE_ONBOARD_RGB  true  // Đặt thành 'true' nếu dùng LED RGB WS2812B tích hợp trên board ESP32-S3
 #define PIN_RGB_WS2812   48    // Chân điều khiển LED RGB WS2812B (thường là 48 hoặc 38)
+
+// Cấu hình các chân điều khiển phần cứng mới thêm
+#define PIN_PM25_LED     5     // Chân cấp nguồn LED cảm biến bụi GP2Y1010
+#define PIN_PM25_ANALOG  6     // Chân ADC đọc điện áp cảm biến bụi GP2Y1010
+#define PIN_SERVO_VALVE  7     // Chân điều khiển Servo van thông gió
 
 // Các chân GPIO nếu bạn sử dụng LED rời gắn ngoài (khi USE_ONBOARD_RGB = false)
 #define PIN_LED_COOLING  10    // LED Xanh báo làm mát (Cooling)
@@ -66,10 +71,16 @@ const float CO2_HYSTERESIS    = 100.0;  // Khoảng trễ CO2 (Quạt tắt khi 
 const float HUMIDITY_MAX      = 60.0;   // Ngưỡng Độ ẩm tối đa (%) theo chuẩn
 const float HUMIDITY_HYSTERESIS = 5.0;  // Khoảng trễ Độ ẩm (Quạt tắt khi < 55%)
 
+// Ngưỡng chất lượng không khí mở rộng (Bụi mịn PM2.5)
+const float PM25_MAX          = 50.0;   // Ngưỡng bụi PM2.5 kích hoạt quạt (ug/m3)
+const float PM25_HYSTERESIS   = 10.0;   // Khoảng trễ PM2.5 (Quạt tắt khi < 40ug/m3)
+
 // Quản lý trạng thái hiện tại
 bool currentFanState   = false; // Trạng thái Quạt tản (false: OFF, true: ON)
 bool isCoolingActive   = false; // Trạng thái Làm mát
 bool isHeatingActive   = false; // Trạng thái Làm ấm
+float currentPM25      = 0.0;   // Trạng thái nồng độ bụi PM2.5 hiện tại
+int currentValveAngle  = 0;     // Góc mở van thông gió qua Servo (0 - 90 độ)
 
 // Các biến điều khiển hệ thống nâng cao
 String hvacMode = "auto";
@@ -112,13 +123,58 @@ void controlTemperatureLEDs(bool cooling, bool heating) {
       neopixelWrite(PIN_RGB_WS2812, 0, 0, 128); // Sáng màu Xanh Dương (Blue) báo làm mát
     } else if (heating) {
       neopixelWrite(PIN_RGB_WS2812, 128, 0, 0); // Sáng màu Đỏ (Red) báo làm ấm
+    } else if (systemPowerState) {
+      neopixelWrite(PIN_RGB_WS2812, 0, 128, 0); // Sáng màu Xanh Lá (Green) báo nhiệt độ lý tưởng
     } else {
-      neopixelWrite(PIN_RGB_WS2812, 0, 0, 0);   // Tắt LED
+      neopixelWrite(PIN_RGB_WS2812, 10, 5, 0);   // Sáng màu Cam mờ báo chế độ chờ
     }
   } else {
     digitalWrite(PIN_LED_COOLING, cooling ? HIGH : LOW);
     digitalWrite(PIN_LED_HEATING, heating ? HIGH : LOW);
   }
+}
+
+/**
+ * Hàm đọc nồng độ bụi PM2.5 từ cảm biến bụi GP2Y1010AU0F
+ */
+float readPM25() {
+  digitalWrite(PIN_PM25_LED, LOW); // Bật LED cảm biến bụi (Active-LOW)
+  delayMicroseconds(280);
+  int voMeasured = analogRead(PIN_PM25_ANALOG);
+  delayMicroseconds(40);
+  digitalWrite(PIN_PM25_LED, HIGH); // Tắt LED cảm biến bụi
+  
+  // Chuyển đổi giá trị ADC 12-bit (0 - 4095) trên ESP32 sang điện áp (0 - 3.3V)
+  float calcVoltage = voMeasured * (3.3 / 4095.0);
+  
+  // Công thức tuyến tính thực nghiệm: mật độ bụi (mg/m3) = 0.17 * Điện áp - 0.1
+  float dustDensity = 0.17 * calcVoltage - 0.1;
+  if (dustDensity < 0.0) dustDensity = 0.0;
+  
+  // Đổi sang ug/m3
+  float pm25 = dustDensity * 1000.0;
+  return pm25;
+}
+
+/**
+ * Hàm điều khiển góc quay của Servo van thông gió (góc từ 0 - 180 độ)
+ * Sử dụng tính năng LEDC PWM của vi điều khiển ESP32
+ */
+void setServoAngle(int angle) {
+  angle = constrain(angle, 0, 180);
+  
+  // Thời gian độ rộng xung chuẩn của Servo từ 0.5ms (0 độ) đến 2.5ms (180 độ)
+  float pulseMs = 0.5 + (angle / 180.0) * 2.0;
+  
+  // Chu kỳ PWM là 20ms (tần số 50Hz).
+  // Chuyển đổi sang giá trị duty cycle tương ứng độ phân giải 14-bit (2^14 - 1 = 16383)
+  int duty = (int)((pulseMs / 20.0) * 16383.0);
+  
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(PIN_SERVO_VALVE, duty);
+#else
+  ledcWrite(0, duty); // Channel 0
+#endif
 }
 
 // =========================================================================
@@ -336,9 +392,23 @@ void setup() {
   Serial.println("  KHOI DONG SAN PHAM HVAC CONTROL SMART-IOT COMPLETED");
   Serial.println("=======================================================");
 
-  // 1. Cấu hình chân phần cứng Output
+  // 1. Cấu hình chân phần cứng Output/Input
   pinMode(PIN_RELAY_FAN, OUTPUT);
   controlFan(false); // Quạt tắt ban đầu
+
+  // Cấu hình cảm biến bụi PM2.5
+  pinMode(PIN_PM25_LED, OUTPUT);
+  digitalWrite(PIN_PM25_LED, HIGH); // Tắt LED hồng ngoại của cảm biến lúc đầu
+  pinMode(PIN_PM25_ANALOG, INPUT);
+
+  // Cấu hình Servo van thông gió dùng LEDC PWM
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcAttach(PIN_SERVO_VALVE, 50, 14); // Tần số 50Hz, Độ phân giải 14-bit
+#else
+  ledcSetup(0, 50, 14); // Kênh 0, Tần số 50Hz, Độ phân giải 14-bit
+  ledcAttachPin(PIN_SERVO_VALVE, 0);
+#endif
+  setServoAngle(0); // Đóng van thông gió ban đầu (0 độ)
 
   if (!USE_ONBOARD_RGB) {
     pinMode(PIN_LED_COOLING, OUTPUT);
@@ -401,9 +471,12 @@ void loop() {
       float humidity    = airSensor.getHumidity();
       float co2         = airSensor.getCO2();
 
+      // Đọc giá trị bụi PM2.5 từ cảm biến
+      currentPM25 = readPM25();
+
       // Hiển thị thông số cục bộ lên cổng Serial
-      Serial.printf("[Sensor] CO2: %.1f ppm | Temp: %.1f *C | Hum: %.1f %%\n", 
-                    co2, temperature, humidity);
+      Serial.printf("[Sensor] CO2: %.1f ppm | Temp: %.1f *C | Hum: %.1f %% | PM2.5: %.1f ug/m3\n", 
+                    co2, temperature, humidity, currentPM25);
 
       // A. CHỈ CHẠY THUẬT TOÁN ĐIỀU KHIỂN NẾU HỆ THỐNG ĐƯỢC BẬT (POWER = ON)
       if (systemPowerState) {
@@ -420,6 +493,10 @@ void loop() {
           } else if (temperature < (TEMP_SETPOINT - TEMP_HYSTERESIS / 2.0)) {
             nextCoolingState = false;
             nextHeatingState = true;
+          } else {
+            // Nhiệt độ lý tưởng (Comfort Zone)
+            nextCoolingState = false;
+            nextHeatingState = false;
           }
         } else {
           // Che do thu cong
@@ -435,21 +512,21 @@ void loop() {
           }
         }
 
-        if (nextCoolingState != isCoolingActive || nextHeatingState != isHeatingActive) {
-          controlTemperatureLEDs(nextCoolingState, nextHeatingState);
-          Serial.printf("  --> [LED Local] Cap nhat trang thai: %s\n", 
-                        nextCoolingState ? "LAM MAT (LED XANH BAT)" : (nextHeatingState ? "LAM AM (LED DO BAT)" : "TAT (OFF)"));
-        }
+        // Luôn gọi hàm để cập nhật màu LED chuẩn xác (bao gồm LED Xanh lá khi bình thường)
+        controlTemperatureLEDs(nextCoolingState, nextHeatingState);
 
         // ===================================================================
-        // 2. THUẬT TOÁN ĐIỀU KHIỂN QUẠT TẢN THÔNG GIÓ (CO2 & ĐỘ ẨM)
+        // 2. THUẬT TOÁN ĐIỀU KHIỂN QUẠT TẢN THÔNG GIÓ (CO2 & PM2.5)
         // ===================================================================
         bool nextFanState = currentFanState;
 
         if (fanMode == "auto") {
-          if (co2 > CO2_MAX || humidity > HUMIDITY_MAX) {
+          // Bật quạt tản khi nồng độ CO2 hoặc PM2.5 vượt ngưỡng nguy hại
+          if (co2 > CO2_MAX || currentPM25 > PM25_MAX) {
             nextFanState = true;
-          } else if (co2 < (CO2_MAX - CO2_HYSTERESIS) && humidity < (HUMIDITY_MAX - HUMIDITY_HYSTERESIS)) {
+          } 
+          // Chỉ tắt quạt khi cả CO2 và PM2.5 đều hạ xuống dưới ngưỡng trễ an toàn
+          else if (co2 < (CO2_MAX - CO2_HYSTERESIS) && currentPM25 < (PM25_MAX - PM25_HYSTERESIS)) {
             nextFanState = false;
           }
         } else {
@@ -466,8 +543,40 @@ void loop() {
           Serial.printf("  --> [QUAT Local] Cap nhat Relay Quat: %s\n", 
                         nextFanState ? "ON (BAT QUAT)" : "OFF (TAT QUAT)");
         }
+
+        // ===================================================================
+        // 3. THUẬT TOÁN ĐIỀU KHIỂN GÓC MỞ VAN THÔNG GIÓ (SERVO)
+        // ===================================================================
+        int nextValveAngle = 0;
+        
+        // Tỷ lệ phần trăm mở van dựa trên CO2 (khoảng từ 600ppm đến 1200ppm)
+        float co2Ratio = (co2 - 600.0) / 600.0;
+        if (co2Ratio < 0.0) co2Ratio = 0.0;
+        if (co2Ratio > 1.0) co2Ratio = 1.0;
+
+        // Tỷ lệ phần trăm mở van dựa trên PM2.5 (khoảng từ 25ug/m3 đến 100ug/m3)
+        float pm25Ratio = (currentPM25 - 25.0) / 75.0;
+        if (pm25Ratio < 0.0) pm25Ratio = 0.0;
+        if (pm25Ratio > 1.0) pm25Ratio = 1.0;
+
+        // Sử dụng giá trị tỷ lệ lớn nhất giữa CO2 và PM2.5 để mở van
+        float maxRatio = max(co2Ratio, pm25Ratio);
+        nextValveAngle = (int)(maxRatio * 90.0); // Mở góc từ 0 đến 90 độ cho phù hợp
+
+        if (nextValveAngle != currentValveAngle) {
+          currentValveAngle = nextValveAngle;
+          setServoAngle(currentValveAngle);
+          Serial.printf("  --> [SERVO Valve] Thay doi goc mo van: %d do (Ty le %.1f%%)\n", 
+                        currentValveAngle, (currentValveAngle / 90.0) * 100.0);
+        }
       } else {
-        // Trạng thái nguồn tắt (Standby)
+        // Trạng thái nguồn tắt (Standby) - Đóng van thông gió, tắt quạt, sáng cam mờ
+        controlFan(false);
+        controlTemperatureLEDs(false, false);
+        if (currentValveAngle != 0) {
+          currentValveAngle = 0;
+          setServoAngle(0);
+        }
         Serial.println("  --> [System State] Che do cho (Standby). Chờ lenh tu xa...");
       }
 
@@ -476,10 +585,10 @@ void loop() {
       // ===================================================================
       if (mqttClient.connected()) {
         char jsonPayload[256];
-        // Đóng gói JSON thủ công siêu nhẹ, tương thích 100% với Cloud
+        // Đóng gói JSON thủ công bao gồm nồng độ bụi thực tế và góc mở van thông gió
         snprintf(jsonPayload, sizeof(jsonPayload),
-                 "{\"device_id\":\"%s\",\"temperature\":%.2f,\"outdoor_temperature\":%.2f,\"humidity\":%.2f,\"co2\":%d,\"dust\":12.5}",
-                 MQTT_DEVICE_ID, temperature, (temperature + 3.2), humidity, (int)co2);
+                 "{\"device_id\":\"%s\",\"temperature\":%.2f,\"outdoor_temperature\":%.2f,\"humidity\":%.2f,\"co2\":%d,\"dust\":%.2f,\"valve_angle\":%d}",
+                 MQTT_DEVICE_ID, temperature, (temperature + 3.2), humidity, (int)co2, currentPM25, currentValveAngle);
 
         Serial.printf("[MQTT Publish] Gui tin len topic [%s]: %s\n", MQTT_PUB_TOPIC, jsonPayload);
         

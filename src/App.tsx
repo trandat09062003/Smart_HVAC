@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   CloudRain,
   CloudSun,
-  MapPin
+  MapPin,
+  RotateCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import mainLogo from '../img/main_logo_2.png';
@@ -111,6 +112,7 @@ export default function App() {
     { id: 'humidity', name: 'Relative Humidity', value: 45.1, unit: '%', status: 'good', trend: -0.5, icon: 'Droplets' },
     { id: 'co2', name: 'CO2 Levels', value: 420.0, unit: 'ppm', status: 'good', trend: 2.1, icon: 'Wind' },
     { id: 'pm25', name: 'Particulates (PM2.5)', value: 8.5, unit: 'µg/m³', status: 'good', trend: 0.8, icon: 'Activity' },
+    { id: 'valve', name: 'Ventilation Valve', value: 0.0, unit: '°', status: 'good', trend: 0.0, icon: 'RotateCw' },
   ]);
 
   const [history, setHistory] = useState<ChartDataPoint[]>([]);
@@ -290,6 +292,7 @@ export default function App() {
           if (reading.id === 'humidity') return updateReading(reading, telemetry.latest.humidity);
           if (reading.id === 'co2') return updateReading(reading, telemetry.latest.co2);
           if (reading.id === 'pm25') return updateReading(reading, telemetry.latest.dust);
+          if (reading.id === 'valve') return updateReading(reading, telemetry.latest.valve_angle);
           return reading;
         }));
       } catch (error) {
@@ -406,11 +409,12 @@ export default function App() {
             </div>
 
             {/* Metric Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
               <MetricCard reading={readings[0]} icon={Thermometer} />
               <MetricCard reading={readings[1]} icon={Droplets} />
               <MetricCard reading={readings[2]} icon={Wind} />
               <MetricCard reading={readings[3]} icon={Activity} />
+              <MetricCard reading={readings[4]} icon={RotateCw} />
             </div>
 
             {/* Main Visualizations */}

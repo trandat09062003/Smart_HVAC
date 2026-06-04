@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS remote_control_state (
 );
 
 ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS outdoor_temperature FLOAT;
+ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS valve_angle INT;
 ALTER TABLE remote_control_state ADD COLUMN IF NOT EXISTS client_id TEXT;
 ALTER TABLE remote_control_state ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
 SELECT create_hypertable('sensor_data', 'time', if_not_exists => TRUE);
@@ -96,7 +97,7 @@ def fetch_telemetry():
     with get_db_connection() as api_conn:
         with api_conn.cursor() as api_cur:
             api_cur.execute("""
-                SELECT time, device_id, temperature, outdoor_temperature, humidity, co2, dust
+                SELECT time, device_id, temperature, outdoor_temperature, humidity, co2, dust, valve_angle
                 FROM sensor_data
                 ORDER BY time DESC
                 LIMIT 200
@@ -122,6 +123,7 @@ def fetch_telemetry():
             'humidity': row[4],
             'co2': row[5],
             'dust': row[6],
+            'valve_angle': row[7] if len(row) > 7 and row[7] is not None else 0,
         }
 
         if latest_primary is None and not is_outdoor_device(point['device_id']):
@@ -142,6 +144,7 @@ def fetch_telemetry():
             'humidity': row[4],
             'co2': row[5],
             'dust': row[6],
+            'valve_angle': row[7] if len(row) > 7 and row[7] is not None else 0,
         }
 
     latest = {
@@ -150,6 +153,7 @@ def fetch_telemetry():
         'humidity': latest_primary.get('humidity') if latest_primary else None,
         'co2': latest_primary.get('co2') if latest_primary else None,
         'dust': latest_primary.get('dust') if latest_primary else None,
+        'valve_angle': latest_primary.get('valve_angle') if latest_primary else 0,
         'time': latest_primary.get('time') if latest_primary else None,
     }
 
@@ -185,6 +189,7 @@ def fetch_telemetry():
             'humidity': row[4],
             'co2': row[5],
             'pm25': row[6],
+            'valveAngle': row[7] if len(row) > 7 and row[7] is not None else 0,
         })
 
     control_state = None
@@ -341,21 +346,23 @@ def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode('utf-8'))
         device_id = payload.get('device_id', 'unknown')
+        valve_angle = to_int(payload.get('valve_angle'))
 
         cur.execute("""
-            INSERT INTO sensor_data (time, device_id, temperature, outdoor_temperature, humidity, co2, dust)
-            VALUES (NOW(), %s, %s, %s, %s, %s, %s)
+            INSERT INTO sensor_data (time, device_id, temperature, outdoor_temperature, humidity, co2, dust, valve_angle)
+            VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
         """, (
             device_id,
             to_float(payload.get('temperature')),
             get_outdoor_temperature(payload),
             to_float(payload.get('humidity')),
             to_int(payload.get('co2')),
-            to_float(payload.get('dust'))
+            to_float(payload.get('dust')),
+            valve_angle
         ))
         conn.commit()
         
-        print(f"✅ Saved → Device: {device_id} | Temp: {payload.get('temperature')} | CO2: {payload.get('co2')}")
+        print(f"✅ Saved → Device: {device_id} | Temp: {payload.get('temperature')} | CO2: {payload.get('co2')} | Valve: {valve_angle}°")
         
     except Exception as e:
         print(f"❌ Error processing message: {e} | Topic: {msg.topic}")
