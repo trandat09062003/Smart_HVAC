@@ -1,5 +1,7 @@
 # 🌡️ Smart HVAC Control System - ESP32-S3 & SCD30 & Cloud/Local Dashboard
 
+![Views](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Ftrandat09062003%2FSmart_HVAC&count_bg=%2379C0FF&title_bg=%23555555&icon=&icon_color=%23E5E5E5&title=views&edge_flat=false)
+
 Dự án này là hệ thống điều khiển vi khí hậu và thông gió thông minh (HVAC) hoàn thiện, hiệu năng cao dành cho vi điều khiển **ESP32-S3-N16R8**, tích hợp cảm biến chất lượng không khí cao cấp **Sensirion SCD30** (đo CO2, Nhiệt độ và Độ ẩm thực tế), đóng ngắt quạt thông gió qua **Module Relay** và kết nối đồng bộ 2 chiều linh hoạt với cả **Dashboard cục bộ (Docker)** lẫn **Cloud Server (smart-hvac.io.vn)** qua giao thức **MQTT**.
 
 Hệ thống được thiết kế theo tiêu chuẩn công nghiệp: tích hợp sẵn thư viện cần thiết (Zero-Library dependency cho biên dịch nhanh), tự động chạy chế độ cục bộ an toàn nếu mất mạng (Offline Fallback) và cơ chế điều khiển có khoảng trễ (Hysteresis) để tối ưu tuổi thọ thiết bị.
