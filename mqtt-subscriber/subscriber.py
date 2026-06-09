@@ -297,7 +297,7 @@ class TelemetryRequestHandler(BaseHTTPRequestHandler):
             if command['fanPower'] not in ['auto', 'on', 'off', 'low', 'medium', 'high']:
                 raise ValueError('fanPower must be auto, on, off, low, medium, or high')
 
-            result = client.publish(CONTROL_TOPIC, json.dumps(command), qos=1)
+            result = client.publish(f"{CONTROL_TOPIC}/{command['device_id']}", json.dumps(command), qos=1)
             result.wait_for_publish(timeout=3)
 
             if result.rc != mqtt.MQTT_ERR_SUCCESS:

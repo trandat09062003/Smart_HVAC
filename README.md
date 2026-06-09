@@ -1,211 +1,308 @@
-# 🌡️ Smart HVAC Control System - ESP32-S3 & SCD30 & Cloud/Local Dashboard
+# Smart HVAC Control System
 
 ![Views](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Ftrandat09062003%2FSmart_HVAC&count_bg=%2379C0FF&title_bg=%23555555&icon=&icon_color=%23E5E5E5&title=views&edge_flat=false)
 
-Dự án này là hệ thống điều khiển vi khí hậu và thông gió thông minh (HVAC) hoàn thiện, hiệu năng cao dành cho vi điều khiển **ESP32-S3-N16R8**, tích hợp cảm biến chất lượng không khí cao cấp **Sensirion SCD30** (đo CO2, Nhiệt độ và Độ ẩm thực tế), đóng ngắt quạt thông gió qua **Module Relay** và kết nối đồng bộ 2 chiều linh hoạt với cả **Dashboard cục bộ (Docker)** lẫn **Cloud Server (smart-hvac.io.vn)** qua giao thức **MQTT**.
+Hệ thống giám sát và điều khiển vi khí hậu (HVAC) cho phòng làm việc, xây dựng trên **ESP32-S3-N16R8**. Thiết bị đọc chất lượng không khí qua cảm biến **Sensirion SCD30** (CO₂, nhiệt độ, độ ẩm) và **Plantower PMS5003** (PM2.5), điều khiển quạt thông gió qua relay, van servo và hiển thị trạng thái qua LED RGB. Dữ liệu được đồng bộ hai chiều với Dashboard web qua **MQTT**, có thể chạy trên máy cục bộ (Docker) hoặc server cloud.
 
-Hệ thống được thiết kế theo tiêu chuẩn công nghiệp: tích hợp sẵn thư viện cần thiết (Zero-Library dependency cho biên dịch nhanh), tự động chạy chế độ cục bộ an toàn nếu mất mạng (Offline Fallback) và cơ chế điều khiển có khoảng trễ (Hysteresis) để tối ưu tuổi thọ thiết bị.
-
----
-
-## 🏗️ 1. Sơ đồ kiến trúc toàn diện (System Architecture)
-
-Hệ thống hỗ trợ song song hai mô hình vận hành: kết nối trực tiếp lên **Cloud Server riêng** hoặc chạy độc lập tại mạng nội bộ qua **Docker Compose**:
-## 📌 2. Sơ đồ kết nối phần cứng (Wiring Diagram)
-
-> [!IMPORTANT]
-> Hãy ngắt tất cả nguồn điện cấp cho ESP32-S3 trước khi thực hiện cắm dây để bảo vệ các cổng GPIO nhạy cảm.
-
-### 🔌 A. Cảm biến SCD30 với ESP32-S3 (Giao tiếp I2C)
-| Chân SCD30 | Chân ESP32-S3 | Chức năng | Màu dây đề xuất |
-| :--- | :--- | :--- | :--- |
-| **VIN** | **3V3** | Cấp nguồn 3.3V | Đỏ |
-| **GND** | **GND** | Đất chung | Đen |
-| **SDA** | **GPIO8** | Đường truyền dữ liệu I2C SDA | Vàng |
-| **SCL** | **GPIO9** | Đường truyền xung nhịp I2C SCL | Cam |
-
-### 🎛️ B. Module Relay với ESP32-S3
-| Chân Relay | Chân ESP32-S3 / Nguồn | Chức năng |
-| :--- | :--- | :--- |
-| **VCC** | **5V** (hoặc nguồn ngoài 5V) | Cấp nguồn cho cuộn hút của Relay |
-| **GND** | **GND** | Đất chung |
-| **IN1** | **GPIO4** | Tín hiệu điều khiển Quạt (Mặc định: Active-LOW) |
-
-### 🌀 C. Đấu nối nguồn Quạt thông gió với Relay
-* **Cực Dương (-)** của nguồn quạt $\rightarrow$ Nối trực tiếp vào **Dây âm** của Quạt.
-* **Cực Âm (+)** của nguồn quạt $\rightarrow$ Nối vào chân **com** của Module Relay.
-* Chân **No** của Module Relay $\rightarrow$ Nối vào **Dây +** của Quạt.
+**Repository:** [github.com/trandat09062003/Smart_HVAC](https://github.com/trandat09062003/Smart_HVAC)
 
 ---
 
-## ⚙️ 3. Cấu hình & Nạp mã nguồn (Firmware Upload)
+## Tổng quan
 
-Để đảm bảo quá trình biên dịch và nạp code không gặp lỗi trên môi trường Windows:
+| Thành phần | Công nghệ |
+|---|---|
+| Vi điều khiển | ESP32-S3-N16R8 |
+| Cảm biến khí | SCD30 (I2C) |
+| Cảm biến bụi | PMS5003 (UART 9600 baud) |
+| Điều khiển | Relay quạt, Servo van 0°–90°, LED WS2812 |
+| Giao tiếp | WiFi, MQTT |
+| Backend | Mosquitto + TimescaleDB + Python subscriber |
+| Frontend | React + Vite + TypeScript |
 
-### ⚠️ Bước quan trọng đối với người dùng Windows & OneDrive:
-Do đường dẫn chứa khoảng trắng hoặc ký tự đặc biệt của OneDrive (`OneDrive - Hanoi University of Science...`) dễ làm các công cụ biên dịch của Arduino IDE bị lỗi đường dẫn:
-1. **Sao chép** toàn bộ thư mục dự án `HVAC_Control` ra một thư mục ngắn gọn ở ổ đĩa chính, ví dụ: **`C:\HVAC_Control`**.
-2. Sử dụng Arduino IDE để mở file **`C:\HVAC_Control\HVAC_Control.ino`**.
+Điều khiển tự động trên ESP32 dùng **luật ngưỡng (rule-based)** kèm hysteresis. Khi mất WiFi hoặc MQTT, firmware vẫn chạy logic cục bộ bình thường.
 
-### 🔧 Cấu hình các thông số trong file `HVAC_Control.ino`:
-Mở file code chính và thay đổi các cấu hình mạng tại vùng cài đặt đầu file:
+---
 
-```cpp
-// 1. Cấu hình mạng WiFi của bạn
-#define WIFI_SSID        "kata"         // Tên WiFi nhà bạn
-#define WIFI_PASSWORD    "Katana3936@"     // Mật khẩu WiFi
+## Kiến trúc hệ thống
 
-// 2. Cấu hình máy chủ Cloud MQTT Broker
-#define MQTT_SERVER      "smart-hvac.io.vn" // Tên miền máy chủ Cloud của bạn
-#define MQTT_PORT        1883               // Cổng MQTT mặc định
-#define MQTT_DEVICE_ID   "indoor-01"        // ID thiết bị trên Cloud
-#define MQTT_PUB_TOPIC   "sensor/indoor"    // Kênh đẩy dữ liệu cảm biến
-#define MQTT_SUB_TOPIC   "remote-control/#" // Kênh nghe lệnh điều khiển từ xa
+```
+┌─────────────┐     publish      ┌──────────────┐     subscribe     ┌─────────────────┐
+│  ESP32-S3   │ ───────────────► │   Mosquitto  │ ◄──────────────── │ mqtt-subscriber │
+│ SCD30/PMS   │  sensor/indoor   │  (port 1883) │    sensor/#       │  + TimescaleDB  │
+│ Relay/Servo │ ◄─────────────── │              │ ────────────────► │  REST API :5000 │
+└─────────────┘ remote-control/# └──────────────┘                   └────────┬────────┘
+                                                                              │
+                                                                     ┌────────▼────────┐
+                                                                     │  Dashboard Web  │
+                                                                     │  (port 3000)    │
+                                                                     └─────────────────┘
 ```
 
-### 💾 Thư viện sử dụng:
-Mã nguồn đã được tích hợp sẵn các thư viện quan trọng cục bộ trong thư mục `src/` (bao gồm `PubSubClient` phục vụ MQTT và thư viện `SparkFun_SCD30` phục vụ cảm biến). Bạn chỉ cần cài duy nhất một thư viện sau trên Arduino IDE (nếu chưa có):
-* Mở **Tools** $\rightarrow$ **Manage Libraries...**
-* Tìm kiếm và cài đặt: **`SparkFun SCD30 Arduino Library`**.
+**Hai cách triển khai:**
 
-### ⚡ Tiến hành nạp code:
-* Chọn đúng mạch **ESP32-S3 Dev Module** (hoặc mạch ESP32-S3 tương thích của bạn).
-* Chọn đúng cổng COM và nhấn nút **Upload** (Mũi tên chỉ sang phải).
-* Mở **Serial Monitor** với tốc độ **`115200`** baud để giám sát quá trình khởi tạo và truyền nhận dữ liệu.
+1. **Cloud** — ESP32 trỏ `MQTT_SERVER` tới `smart-hvac.io.vn`, truy cập Dashboard tại [http://smart-hvac.io.vn](http://smart-hvac.io.vn).
+2. **Local Docker** — Chạy `docker-compose up` trên máy tính, ESP32 trỏ `MQTT_SERVER` về IP LAN của máy đó, mở Dashboard tại `http://localhost:3000`.
+
+Nếu cổng 3000/1883 đã bị chiếm, dùng `docker-compose.alt.yml` (Dashboard cổng **3005**, MQTT cổng **1885**).
 
 ---
 
-## 🧪 3.5. Chương trình kiểm tra phần cứng riêng biệt (Hardware Test)
+## Cấu trúc thư mục
 
-Trước khi chạy chương trình chính phức tạp, bạn hãy nạp các chương trình kiểm tra nhỏ này để kiểm tra xem Relay và LED đã được đấu nối đúng cách và hoạt động tốt chưa.
+```
+HVAC_Control/
+├── HVAC_Control.ino          # Firmware chính
+├── src/                      # Dashboard React + thư viện nhúng (SCD30, PubSubClient)
+├── mqtt-subscriber/          # Nhận MQTT, ghi DB, phục vụ REST API
+├── mosquitto/                # Cấu hình MQTT broker
+├── tests/                    # Sketch kiểm tra phần cứng từng module
+├── hardware/                 # Tài liệu thiết kế PCB (EasyEDA / KiCad / Altium)
+├── libraries/                # Thư viện Arduino tham khảo (SCD30, TinyGSM)
+├── docker-compose.yml        # Triển khai local (cổng 3000 / 1883)
+└── docker-compose.alt.yml    # Triển khai local (cổng 3005 / 1885)
+```
 
-### 🌀 A. Chương trình kiểm tra Quạt tản (Relay Test)
-Mở file **`tests/Relay_Test/Relay_Test.ino`** hoặc copy đoạn code này nạp vào ESP32-S3. Chương trình sẽ tự động **BẬT quạt trong 5 giây** và **TẮT quạt trong 5 giây** liên tục:
+---
+
+## Sơ đồ đấu nối phần cứng
+
+> Ngắt nguồn ESP32 trước khi cắm dây.
+
+### SCD30 (I2C)
+
+| Chân SCD30 | ESP32-S3 | Ghi chú |
+|---|---|---|
+| VIN | 3V3 | |
+| GND | GND | |
+| SDA | GPIO8 | Kéo lên 4.7 kΩ |
+| SCL | GPIO9 | Kéo lên 4.7 kΩ |
+
+### PMS5003 (UART)
+
+| Chân PMS5003 | ESP32-S3 | Ghi chú |
+|---|---|---|
+| VCC | 5V | |
+| GND | GND | |
+| TX | GPIO17 (RX2) | TX cảm biến → RX ESP |
+| RX | GPIO16 (TX2) | RX cảm biến ← TX ESP |
+
+### Relay quạt thông gió
+
+| Chân Relay | ESP32-S3 / Nguồn |
+|---|---|
+| VCC | 5V |
+| GND | GND |
+| IN1 | GPIO4 |
+
+Relay cấu hình **Active-HIGH** (`RELAY_ACTIVE_LOW = false`): HIGH = bật quạt.
+
+Đấu nguồn quạt qua tiếp điểm COM/NO của relay (nguồn quạt tách riêng, không lấy từ 3.3V ESP).
+
+### Servo van thông gió
+
+| Chân Servo | ESP32-S3 |
+|---|---|
+| Signal | GPIO15 |
+| VCC | 5V |
+| GND | GND |
+
+Góc quay 0° (đóng) đến 90° (mở tối đa), điều khiển bằng PWM 50 Hz.
+
+### LED trạng thái
+
+| Thành phần | GPIO | Ý nghĩa |
+|---|---|---|
+| WS2812 onboard | GPIO48 | Xanh dương = làm mát, Đỏ = làm ấm, Xanh lá = vùng comfort, Cam = standby |
+| LED rời (tùy chọn) | GPIO10 / GPIO11 | Cool / Heat khi `USE_ONBOARD_RGB = false` |
+
+Chi tiết thiết kế mạch in: xem [`hardware/hardware_design_guide.md`](hardware/hardware_design_guide.md).
+
+---
+
+## Cấu hình firmware
+
+Mở `HVAC_Control.ino`, sửa khối cấu hình đầu file:
 
 ```cpp
-#define PIN_RELAY_FAN    4     // Chân GPIO4 điều khiển Relay quạt tản
-#define RELAY_ACTIVE_LOW true  // Mức THẤP (LOW) để Bật, mức CAO (HIGH) để Tắt
+#define WIFI_SSID        "TEN_WIFI_CUA_BAN"
+#define WIFI_PASSWORD    "MAT_KHAU_WIFI"
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(PIN_RELAY_FAN, OUTPUT);
-  
-  // Trạng thái ban đầu: TẮT quạt
-  digitalWrite(PIN_RELAY_FAN, RELAY_ACTIVE_LOW ? HIGH : LOW);
-}
+#define MQTT_SERVER      "192.168.1.71"   // IP máy chạy Docker, hoặc "smart-hvac.io.vn"
+#define MQTT_PORT        1883
+#define MQTT_DEVICE_ID   "indoor-01"
+#define MQTT_PUB_TOPIC   "sensor/indoor"
+#define MQTT_SUB_TOPIC   "remote-control/#"
+```
 
-void loop() {
-  // 1. BẬT QUẠT (Kích Relay)
-  Serial.println("Relay -> DANG BAT (ON) - Quat se quay...");
-  digitalWrite(PIN_RELAY_FAN, RELAY_ACTIVE_LOW ? LOW : HIGH);
-  delay(5000); // Đợi 5 giây
-  
-  // 2. TẮT QUẠT (Ngắt Relay)
-  Serial.println("Relay -> DANG TAT (OFF) - Quat se dung...");
-  digitalWrite(PIN_RELAY_FAN, RELAY_ACTIVE_LOW ? HIGH : LOW);
-  delay(5000); // Đợi 5 giây
+### Nạp code
+
+1. Sao chép project ra đường dẫn ngắn (ví dụ `C:\HVAC_Control`) nếu đang nằm trong OneDrive — tránh lỗi biên dịch Arduino do khoảng trắng trong path.
+2. Mở `HVAC_Control.ino` bằng Arduino IDE.
+3. Chọn board **ESP32-S3 Dev Module**, cổng COM tương ứng.
+4. Thư viện SCD30 và PubSubClient đã nhúng trong `src/`; không cần cài thêm qua Library Manager.
+5. Upload, mở Serial Monitor **115200 baud**.
+
+---
+
+## Logic điều khiển tự động
+
+Chu kỳ đọc cảm biến và tính toán: **2 giây**. Chỉ chạy khi `power = true`.
+
+### Nhiệt độ (LED chỉ thị HVAC)
+
+Setpoint mặc định **25°C**, hysteresis **±0.5°C** (biên kích hoạt ±0.25°C).
+
+| Chế độ | Điều kiện | Hành động |
+|---|---|---|
+| `auto` | T > setpoint + 0.25°C | LED làm mát (xanh dương) |
+| `auto` | T < setpoint − 0.25°C | LED làm ấm (đỏ) |
+| `auto` | Trong vùng comfort | LED xanh lá |
+| `cool` / `heat` / `off` | Manual | Giữ trạng thái theo lệnh Dashboard |
+
+### Quạt thông gió (Relay)
+
+| Chế độ | Bật quạt | Tắt quạt |
+|---|---|---|
+| `auto` | CO₂ > 800 ppm **hoặc** PM2.5 > 50 µg/m³ | CO₂ < 700 ppm **và** PM2.5 < 40 µg/m³ |
+| `on` / `off` | Theo lệnh thủ công | Theo lệnh thủ công |
+
+### Van servo
+
+Mở tỷ lệ theo chỉ số xấu nhất giữa CO₂ và PM2.5:
+
+- CO₂: 600–1200 ppm → 0–100%
+- PM2.5: 25–100 µg/m³ → 0–100%
+- Góc van = `max(co2Ratio, pm25Ratio) × 90°`
+
+### Standby
+
+Khi nhận `"power": false`: tắt quạt, đóng van (0°), tắt LED nhiệt, LED onboard chuyển cam mờ.
+
+---
+
+## Giao thức MQTT
+
+### Telemetry (ESP32 → Broker)
+
+Topic: `sensor/indoor`
+
+```json
+{
+  "device_id": "indoor-01",
+  "temperature": 25.20,
+  "outdoor_temperature": 28.40,
+  "humidity": 55.00,
+  "co2": 650,
+  "dust": 12.50,
+  "valve_angle": 30
 }
 ```
-* **Kỳ vọng**: Bạn sẽ nghe thấy tiếng "cạch" phát ra từ Relay và quạt tản sẽ quay 5 giây rồi dừng 5 giây. Nếu có tiếng cạch của Relay nhưng quạt không quay, hãy kiểm tra lại nguồn ngoài nuôi quạt và cách đấu COM/NO như ở **Mục 2**.
 
-### 💡 B. Chương trình kiểm tra LED nhiệt độ (LED Test)
-Mở file **`tests/LED_Test/LED_Test.ino`** để kiểm tra đồng thời cả LED Onboard WS2812 (GPIO48) và 2 LED rời bên ngoài (Xanh dương ở GPIO10, Đỏ ở GPIO11) nhấp nháy chuyển trạng thái làm mát và làm ấm liên tục sau mỗi 2 giây.
+`outdoor_temperature` hiện được ước lượng từ nhiệt độ trong phòng (+3.2°C) khi chưa có cảm biến ngoài trời riêng.
 
----
+### Điều khiển từ xa (Dashboard → ESP32)
 
-## 🖥️ 4. Hướng dẫn truy cập Dashboard chi tiết
+Topic: `remote-control/indoor-01`
 
-Dự án hỗ trợ cả việc kết nối lên Cloud toàn cầu và chạy thử nghiệm Dashboard nội bộ bằng Docker.
+```json
+{
+  "device_id": "indoor-01",
+  "power": true,
+  "temp": 25.0,
+  "operationMode": "auto",
+  "fanPower": "auto"
+}
+```
 
-### 🌐 PHƯƠNG ÁN A: Truy cập Dashboard qua Cloud Server (Khuyên dùng)
-Khi thiết bị ESP32-S3 của bạn đã nạp code thành công và kết nối WiFi, dữ liệu sẽ được đẩy trực tiếp lên Cloud Server của bạn.
-
-1. **Địa chỉ truy cập**: Mở trình duyệt Web của bạn (Chrome, Edge, Firefox) và truy cập địa chỉ:
-   ```text
-   http://smart-hvac.io.vn
-   ```
-2. **Đồng bộ thiết bị**: 
-   * Trên giao diện Dashboard Cloud, chọn ID thiết bị là **`indoor-01`**.
-   * Hệ thống sẽ tự động cập nhật các đồ thị trực quan về Nhiệt độ trong phòng, Nhiệt độ giả lập ngoài trời, Độ ẩm không khí, Nồng độ khí CO2 và chỉ số bụi mịn PM2.5.
-3. **Điều khiển từ xa (Remote Control)**:
-   * Bạn có thể điều khiển trực tiếp trên giao diện Dashboard Cloud (nút Power ON/OFF, chọn chế độ Cool/Heat/Fan, thay đổi nhiệt độ mục tiêu).
-   * Lệnh điều khiển dạng JSON sẽ được đẩy xuống broker `smart-hvac.io.vn` trên topic `remote-control/indoor-01`.
-   * Mạch ESP32-S3 của bạn sẽ lập tức nhận lệnh thông qua hàm `mqttCallback()` để bật/tắt hệ thống hoặc thay đổi nhiệt độ cài đặt cục bộ.
+| Trường | Giá trị hợp lệ |
+|---|---|
+| `operationMode` | `auto`, `cool`, `heat`, `off` |
+| `fanPower` | `auto`, `on`, `off` |
 
 ---
 
-### 💻 PHƯƠNG ÁN B: Vận hành & Truy cập Dashboard cục bộ (Local Docker)
-Nếu muốn tự vận hành toàn bộ hệ thống cơ sở dữ liệu và giao diện ngay trên máy tính cá nhân của mình, bạn hãy sử dụng nền tảng Docker đã được thiết lập sẵn.
+## Chạy Dashboard local (Docker)
 
-#### ⚙️ Khởi chạy cụm dịch vụ cục bộ:
-1. Đảm bảo máy tính của bạn đã cài đặt và đang chạy ứng dụng **Docker Desktop**.
-2. Mở cửa sổ dòng lệnh (PowerShell hoặc Command Prompt) tại thư mục dự án (`C:\HVAC_Control`).
-3. Gõ lệnh khởi chạy (Docker sẽ tự động tải các image, biên dịch và chạy ngầm 4 dịch vụ):
-   ```bash
-   docker-compose up -d --build
-   ```
-4. Kiểm tra các dịch vụ đang chạy bằng lệnh:
-   ```bash
-   docker ps
-   ```
-   Bạn sẽ thấy 4 container hoạt động bình thường:
-   * `hvac_control-app-1` (Cổng 3000) - Giao diện Web.
-   * `mqtt-subscriber` - Bộ điều phối dữ liệu Python.
-   * `timescaledb` - Cơ sở dữ liệu chuỗi thời gian PostgreSQL.
-   * `mosquitto` (Cổng 1883) - MQTT Broker cục bộ.
+**Yêu cầu:** Docker Desktop đang chạy.
 
-#### 🔗 Truy cập Dashboard Cục bộ:
-1. Mở trình duyệt Web và truy cập đường dẫn:
-   ```text
-   http://localhost:3000
-   ```
-2. **Thay đổi cấu hình trên ESP32 để chạy Local**:
-   Nếu muốn ESP32 gửi dữ liệu về máy tính cá nhân thay vì Cloud, hãy mở file `HVAC_Control.ino` lên và đổi `MQTT_SERVER` thành **Địa chỉ IP máy tính của bạn** trong mạng WiFi nội bộ (Ví dụ: `192.168.1.15`), sau đó nạp lại code.
-3. **Xem logs nhận dữ liệu cục bộ**:
-   Để kiểm tra xem dữ liệu từ thiết bị gửi về máy tính đã được ghi nhận vào cơ sở dữ liệu hay chưa, chạy lệnh:
-   ```bash
-   docker logs mqtt-subscriber --tail 50 -f
-   ```
+```bash
+# Cổng mặc định: Dashboard 3000, MQTT 1883
+docker-compose up -d --build
+
+# Hoặc cổng thay thế: Dashboard 3005, MQTT 1885
+docker-compose -f docker-compose.alt.yml up -d --build
+```
+
+| Container | Vai trò |
+|---|---|
+| `app` | Giao diện web React |
+| `mosquitto` | MQTT broker |
+| `timescaledb` | Lưu dữ liệu chuỗi thời gian |
+| `mqtt-subscriber` | Nhận MQTT, REST API cổng 5000 |
+
+Sau khi khởi động:
+
+- Dashboard: `http://localhost:3000` (hoặc `:3005` nếu dùng file alt)
+- Kiểm tra log: `docker logs mqtt-subscriber --tail 50 -f`
+- Cấu hình ESP32: `MQTT_SERVER` = IP máy tính trong mạng LAN
+
+Mở tường lửa Windows cho cổng MQTT (PowerShell Admin):
+
+```powershell
+New-NetFirewallRule -DisplayName "MQTT Broker Local" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 1883
+```
 
 ---
 
-## 🛠️ 5. Hướng dẫn xử lý sự cố thường gặp (Troubleshooting)
+## Kiểm tra phần cứng
 
-### 🔴 Lỗi 1: Quạt không quay khi Relay đã kích hoạt (Đèn báo trên Relay sáng đỏ)
-* **Nguyên nhân**: Cuộn hút của Module Relay cần nguồn điện 5V ổn định để đóng tiếp điểm COM sang NO. Nếu cấp nguồn 3.3V từ ESP32, rơ-le chỉ sáng đèn led báo hiệu chứ không có tiếng cạch đóng khóa cơ học.
-* **Khắc phục**: 
-  1. Đấu dây **VCC** của Module Relay vào chân **5V** (hoặc chân **5V/VBUS** trên ESP32-S3).
-  2. Đảm bảo rút jum kết nối giữa chân `JD-VCC` và `VCC` ra nếu bạn dùng nguồn cấp ngoài cô lập, hoặc cắm chặt jum này nếu muốn dùng chung nguồn 5V của vi điều khiển.
+Chạy lần lượt các sketch trong `tests/` trước khi nạp firmware chính:
 
-### 🟡 Lỗi 2: Lỗi biên dịch `SparkFun_SCD30_Arduino_Library.h` hoặc `Adafruit_NeoPixel.h`
-* **Nguyên nhân**: Thiếu thư viện hoặc đường dẫn chứa khoảng trắng.
-* **Khắc phục**: 
-  1. Di chuyển toàn bộ thư mục dự án ra ngoài ổ đĩa `C:\HVAC_Control`.
-  2. Cài đặt các thư viện thông qua **Manage Libraries** trên Arduino IDE như hướng dẫn ở mục 3.
-
-### 🔵 Lỗi 3: ESP32 báo lỗi kết nối MQTT Broker `rc = -2` liên tục
-* **Nguyên nhân**: Mã lỗi `-2` (`MQTT_CONNECT_FAILED`) xảy ra khi thiết bị không thể thiết lập kết nối mạng TCP tới Broker. Thường do máy chủ MQTT bị chặn bởi tường lửa của hệ điều hành, hoặc ESP32 bị mất kết nối WiFi.
-* **Khắc phục**:
-  1. Đảm bảo tên WiFi (`WIFI_SSID`) và Mật khẩu chính xác 100%.
-  2. Kiểm tra xem Cloud Server của bạn có mở cổng `1883` ra Internet công cộng chưa.
-  3. Nếu kiểm tra với Broker cục bộ (Local), hãy chạy lệnh PowerShell dưới đây với quyền Administrator trên máy tính của bạn để mở tường lửa Windows cho cổng 1883:
-     ```powershell
-     New-NetFirewallRule -DisplayName "MQTT Broker Local" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 1883
-     ```
+| Sketch | Mục đích |
+|---|---|
+| `tests/test_scd30/test_scd30.ino` | Đọc CO₂, nhiệt độ, độ ẩm từ SCD30 |
+| `tests/ReadHex_SCD30/ReadHex_SCD30.ino` | Debug raw I2C SCD30 |
+| `tests/Relay_Test/Relay_Test.ino` | Bật/tắt relay GPIO4 mỗi 2 giây |
+| `tests/Servo_Test/Servo_Test.ino` | Quét góc servo van GPIO15 |
+| `tests/Full_Hardware_Test/Full_Hardware_Test.ino` | Kiểm tra tổng hợp toàn bộ ngoại vi |
 
 ---
 
-## 📝 6. Nguyên lý tự động hóa cục bộ (Offline Smart Automation)
+## Xử lý sự cố
 
-Hệ thống sở hữu khả năng tự động hóa cực kỳ thông minh và hoạt động độc lập ngay cả khi mất kết nối mạng (WiFi/MQTT):
+**Relay kêu nhưng quạt không quay**
+- Cấp **5V** cho VCC module relay, không dùng 3.3V.
+- Kiểm tra đấu nối COM/NO và nguồn quạt riêng.
 
-* **Thuật toán kiểm soát chất lượng không khí (Quạt thông gió)**: 
-  * **Khi ở chế độ Auto (Tự động):** Cứ mỗi 2 giây, vi điều khiển đọc cảm biến SCD30. Nếu **CO2 > 800 ppm** hoặc **Độ ẩm > 60%**, Relay quạt thông gió (GPIO4) sẽ lập tức được kích hoạt. Quạt chỉ tắt khi nồng độ CO2 đã hạ xuống dưới **700 ppm** và Độ ẩm dưới **55%** (Cơ chế khoảng trễ Hysteresis giúp quạt chạy bền bỉ, không bật tắt liên tục gây hỏng động cơ).
-  * **Khi ở chế độ Manual (Thủ công):** Hệ thống sẽ bỏ qua các chỉ số cảm biến CO2/Độ ẩm và tuân thủ tuyệt đối lệnh BẬT (ON) / TẮT (OFF) quạt từ giao diện người dùng trên Dashboard.
+**Không đọc được SCD30**
+- Kiểm tra SDA/SCL (GPIO8/9), nguồn 3.3V.
+- Chạy `test_scd30.ino`, xem Serial Monitor có báo địa chỉ I2C `0x61` không.
 
-* **Thuật toán kiểm soát nhiệt độ (HVAC - LED)**:
-  * **Khi ở chế độ Auto:** 
-    * Khi nhiệt độ môi trường vượt quá `TEMP_SETPOINT + 0.25°C` $\rightarrow$ Kích hoạt làm mát (LED Onboard sáng màu **Xanh Dương**, LED rời GPIO10 bật).
-    * Khi nhiệt độ môi trường giảm dưới `TEMP_SETPOINT - 0.25°C` $\rightarrow$ Kích hoạt làm ấm (LED Onboard sáng màu **Đỏ**, LED rời GPIO11 bật).
-  * **Khi ở chế độ Manual:** Đèn LED sẽ được giữ cố định ở trạng thái Làm mát (Cooling), Làm ấm (Heating) hoặc Tắt (Off) hoàn toàn dựa vào nút bấm bạn chọn trên Dashboard, bỏ qua việc so sánh nhiệt độ.
-  * **Chế độ Standby (Chờ):** Nếu nhận lệnh tắt nguồn hệ thống (`"power":false`) từ Dashboard, hệ thống sẽ ngắt toàn bộ quạt, tắt LED điều khiển nhiệt độ và chuyển LED Onboard sang màu **Cam mờ** dịu nhẹ báo hiệu trạng thái chờ.
+**PM2.5 luôn bằng 0**
+- Đảo TX/RX nếu cần (GPIO16 ↔ GPIO17).
+- PMS5003 cần vài giây khởi động; đợi 30s sau khi cấp nguồn.
+
+**MQTT lỗi `rc = -2`**
+- Sai SSID/mật khẩu WiFi, hoặc ESP32 không ping được broker.
+- Với local: kiểm tra IP máy, tường lửa cổng 1883, container `mosquitto` đang chạy.
+
+**Lỗi biên dịch do đường dẫn**
+- Copy project ra `C:\HVAC_Control` rồi mở lại trong Arduino IDE.
+
+---
+
+## Công nghệ sử dụng
+
+- **Firmware:** Arduino (C++), ESP32 Arduino Core
+- **Dashboard:** React 19, Vite, Tailwind CSS, Recharts
+- **Backend:** Python 3, Paho MQTT, PostgreSQL + TimescaleDB
+- **Broker:** Eclipse Mosquitto
+
+---
+
+## Tác giả
+
+Trần Đạt — [trandat09062003](https://github.com/trandat09062003)
+
+Dự án phục vụ mục đích nghiên cứu và triển khai hệ thống giám sát chất lượng không khí trong nhà kết hợp điều khiển thông gió cơ bản.

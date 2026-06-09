@@ -157,7 +157,7 @@ export default function App() {
 
   const postRemoteControl = useCallback(async (nextState: HVACState, requestedAt: string) => {
     const payload: RemoteControlPayload = {
-      device_id: 'hvac-01',
+      device_id: 'indoor-01',
       power: nextState.power,
       temp: nextState.targetTemp,
       operationMode: nextState.mode,
