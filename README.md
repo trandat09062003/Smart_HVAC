@@ -2,7 +2,7 @@
 
 ![Views](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Ftrandat09062003%2FSmart_HVAC&count_bg=%2379C0FF&title_bg=%23555555&icon=&icon_color=%23E5E5E5&title=views&edge_flat=false)
 
-Hệ thống giám sát và điều khiển vi khí hậu (HVAC) cho phòng làm việc, xây dựng trên **ESP32-S3-N16R8**. Thiết bị đọc chất lượng không khí qua cảm biến **Sensirion SCD30** (CO₂, nhiệt độ, độ ẩm) và **Plantower PMS5003** (PM2.5), điều khiển quạt thông gió qua relay, van servo và hiển thị trạng thái qua LED RGB. Dữ liệu được đồng bộ hai chiều với Dashboard web qua **MQTT**, có thể chạy trên máy cục bộ (Docker) hoặc server cloud.
+Hệ thống giám sát và điều khiển vi khí hậu (HVAC) cho phòng làm việc, xây dựng trên **ESP32-S3-N16R8**. Thiết bị đọc chất lượng không khí qua cảm biến **Sensirion SCD30** (CO₂, nhiệt độ, độ ẩm) và **Plantower PMS7003** (PM2.5), điều khiển quạt thông gió qua relay, van servo và hiển thị trạng thái qua LED RGB. Dữ liệu được đồng bộ hai chiều với Dashboard web qua **MQTT**, có thể chạy trên máy cục bộ (Docker) hoặc server cloud.
 
 **Repository:** [github.com/trandat09062003/Smart_HVAC](https://github.com/trandat09062003/Smart_HVAC)
 
@@ -14,7 +14,7 @@ Hệ thống giám sát và điều khiển vi khí hậu (HVAC) cho phòng làm
 |---|---|
 | Vi điều khiển | ESP32-S3-N16R8 |
 | Cảm biến khí | SCD30 (I2C) |
-| Cảm biến bụi | PMS5003 (UART 9600 baud) |
+| Cảm biến bụi | PMS7003 (UART 9600 baud, passive mode) |
 | Điều khiển | Relay quạt, Servo van 0°–90°, LED WS2812 |
 | Giao tiếp | WiFi, MQTT |
 | Backend | Mosquitto + TimescaleDB + Python subscriber |
@@ -78,14 +78,20 @@ HVAC_Control/
 | SDA | GPIO8 | Kéo lên 4.7 kΩ |
 | SCL | GPIO9 | Kéo lên 4.7 kΩ |
 
-### PMS5003 (UART)
+### PMS7003 (UART)
 
-| Chân PMS5003 | ESP32-S3 | Ghi chú |
+Cảm biến hoạt động ở **chế độ passive**: tự phát khung dữ liệu 32 byte (header `0x42 0x4D`) qua UART 9600 8N1, không cần ESP gửi lệnh kích hoạt.
+
+| Chân PMS7003 | ESP32-S3 | Ghi chú |
 |---|---|---|
-| VCC | 5V | |
+| VCC | 5V | Dòng khởi động ~100 mA |
 | GND | GND | |
-| TX | GPIO17 (RX2) | TX cảm biến → RX ESP |
-| RX | GPIO16 (TX2) | RX cảm biến ← TX ESP |
+| TX (Pin 4) | GPIO17 (RX2) | TX cảm biến → RX ESP |
+| RX (Pin 5) | GPIO16 (TX2) | Để trống hoặc nối TX ESP nếu dùng active mode |
+| SET (Pin 3) | 3.3V hoặc để trống | Kéo lên = chế độ hoạt động bình thường |
+| RESET (Pin 6) | 3.3V hoặc để trống | Kéo lên = không reset |
+
+> Với passive mode, chỉ cần nối VCC, GND, TX → GPIO17. Đợi **≥30 giây** sau khi cấp nguồn để cảm biến ổn định và bắt đầu xuất dữ liệu.
 
 ### Relay quạt thông gió
 
@@ -280,8 +286,10 @@ Chạy lần lượt các sketch trong `tests/` trước khi nạp firmware chí
 - Chạy `test_scd30.ino`, xem Serial Monitor có báo địa chỉ I2C `0x61` không.
 
 **PM2.5 luôn bằng 0**
-- Đảo TX/RX nếu cần (GPIO16 ↔ GPIO17).
-- PMS5003 cần vài giây khởi động; đợi 30s sau khi cấp nguồn.
+- Kiểm tra nối TX của PMS7003 vào GPIO17 (RX ESP), cấp **5V** ổn định.
+- Chân SET phải ở mức HIGH (hoặc để trống nếu module đã kéo lên sẵn).
+- PMS7003 cần ~30 giây khởi động sau khi cấp nguồn trước khi có dữ liệu.
+- Mở Serial Monitor, tìm log `[PMS] HEX:` — nếu có khung `42 4D ...` thì UART đúng.
 
 **MQTT lỗi `rc = -2`**
 - Sai SSID/mật khẩu WiFi, hoặc ESP32 không ping được broker.

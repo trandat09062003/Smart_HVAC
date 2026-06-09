@@ -42,9 +42,10 @@
 #define USE_ONBOARD_RGB  true  // Đặt thành 'true' nếu dùng LED RGB WS2812B tích hợp trên board ESP32-S3
 #define PIN_RGB_WS2812   48    // Chân điều khiển LED RGB WS2812B (thường là 48 hoặc 38)
 
-// Cấu hình chân UART cho cảm biến bụi PMS5003 (Physical Pin 9 -> GPIO16 (net PMS RX), Pin 10 -> GPIO17 (net PMS TX))
-#define PMS_RX           17    // ESP32 RX pin (connects to PMS TX net)
-#define PMS_TX           16    // ESP32 TX pin (connects to PMS RX net)
+// Cấu hình chân UART cho cảm biến bụi Plantower PMS7003 (Passive mode, 9600 baud)
+// Physical Pin 9 -> GPIO16 (ESP TX), Pin 10 -> GPIO17 (ESP RX)
+#define PMS_RX           17    // ESP32 RX ← nối TX của PMS7003
+#define PMS_TX           16    // ESP32 TX → nối RX của PMS7003
 #define PIN_SERVO_VALVE  15    // Chân điều khiển Servo van thông gió (Physical Pin 8 -> GPIO15)
 
 // Các chân GPIO nếu bạn sử dụng LED rời gắn ngoài (khi USE_ONBOARD_RGB = false)
@@ -135,7 +136,7 @@ void controlTemperatureLEDs(bool cooling, bool heating) {
 }
 
 /**
- * Hàm đọc nồng độ bụi PM2.5 từ cảm biến bụi PMS (giao tiếp UART qua Serial2)
+ * Đọc PM2.5 từ Plantower PMS7003 (UART passive, khung 32 byte, header 0x42 0x4D)
  */
 float readPM25() {
   static uint8_t buffer[32];
@@ -156,7 +157,7 @@ float readPM25() {
     
     if (index == 32) {
       // Hex dump
-      Serial.print("[PMS] HEX: ");
+      Serial.print("[PMS7003] HEX: ");
       for(int i=0; i<32; i++) { Serial.printf("%02X ", buffer[i]); }
       Serial.println();
 
@@ -435,9 +436,9 @@ void setup() {
   pinMode(PIN_RELAY_FAN, OUTPUT);
   controlFan(false); // Quạt tắt ban đầu
 
-  // Khởi tạo UART cho cảm biến bụi PMS
+  // Khởi tạo UART cho cảm biến bụi PMS7003 (chế độ passive, không cần gửi lệnh)
   Serial2.begin(9600, SERIAL_8N1, PMS_RX, PMS_TX);
-  Serial.printf("[PMS] Khoi tao UART: RX -> GPIO%d, TX -> GPIO%d\n", PMS_RX, PMS_TX);
+  Serial.printf("[PMS7003] Khoi tao UART 9600 8N1: RX -> GPIO%d, TX -> GPIO%d\n", PMS_RX, PMS_TX);
 
   // Cấu hình Servo van thông gió dùng LEDC PWM
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
